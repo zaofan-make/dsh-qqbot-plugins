@@ -55,14 +55,14 @@
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/pick-one/cover.png"
     },
     {
-      "id": "proactive-companion",
-      "name": "主动陪伴与私聊关怀",
+      "id": "proactive-companion-waketo",
+      "name": "主动陪伴·唤醒版（参考实现）",
       "author": "TGSWYH",
-      "version": "1.0.6",
+      "version": "1.0.0",
       "minPluginVersion": "1.10.44",
-      "description": "专为 dsh-qqbot 打造的主动陪伴与智能冒泡扩展包。支持作息时段关怀与空闲超时冒泡双路线并行、多层频控退避与夜间免打扰，告别机器人“你不找她她就不找你”的距离感。",
+      "description": "与「主动陪伴与私聊关怀」同源，但到点先 caps.wakeTo 唤醒 AI 让它自己说，而不是直发预置文案。留作示例：演示扩展怎么主动开口、怎么自报家门写 prompt、怎么在会话被回收后重建。需要插件 ≥ 1.10.44。",
       "repo": "zaofan-make/dsh-qqbot-plugins",
-      "path": "packs/proactive-companion",
+      "path": "packs/proactive-companion-waketo",
       "tags": [
         "陪伴",
         "关怀",
@@ -86,7 +86,7 @@
         "tools/companion_manage.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
-      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/proactive-companion/cover.png"
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/proactive-companion-waketo/cover.png"
     },
     {
       "id": "useful-tools",
