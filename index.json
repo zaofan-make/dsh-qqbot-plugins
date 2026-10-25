@@ -55,6 +55,40 @@
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/pick-one/cover.png"
     },
     {
+      "id": "proactive-companion",
+      "name": "主动陪伴与私聊关怀",
+      "author": "TGSWYH",
+      "version": "1.0.6",
+      "minPluginVersion": "1.10.44",
+      "description": "专为 dsh-qqbot 打造的主动陪伴与智能冒泡扩展包。支持作息时段关怀与空闲超时冒泡双路线并行、多层频控退避与夜间免打扰，告别机器人“你不找她她就不找你”的距离感。",
+      "repo": "zaofan-make/dsh-qqbot-plugins",
+      "path": "packs/proactive-companion",
+      "tags": [
+        "陪伴",
+        "关怀",
+        "私聊",
+        "日常"
+      ],
+      "kinds": [
+        "commands",
+        "hooks",
+        "tools"
+      ],
+      "files": [
+        "commands/companion.mjs",
+        "cover.png",
+        "hooks/companion-daemon.mjs",
+        "lib/config.mjs",
+        "lib/transport.mjs",
+        "preview.png",
+        "qqbot-pack.json",
+        "README.md",
+        "tools/companion_manage.mjs"
+      ],
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/proactive-companion/cover.png"
+    },
+    {
       "id": "useful-tools",
       "name": "实用小工具",
       "author": "做早饭",
