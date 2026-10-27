@@ -86,7 +86,12 @@ export async function wakeWithRegistries(env, target, prompt, sources) {
   }
   if (matches.size !== 1) throw fail(matches.size ? 'AMBIGUOUS_INSTANCE' : 'HOST_BRIDGE_UNAVAILABLE');
   const manager = [...matches][0];
-  const record = manager.findByPeer('c2c', target);
+  let record = manager.findByPeer('c2c', target);
+  if (!record && typeof manager.getOrCreate === 'function') {
+    try {
+      record = await manager.getOrCreate('c2c', target, target, { scope: 'c2c', targetId: target });
+    } catch {}
+  }
   if (!record || record.scope !== 'c2c' || record.peerId !== target) throw fail('SESSION_NOT_READY');
   let accepted;
   try { accepted = await manager.injectToPeer('c2c', target, prompt, 'subagent-settled'); }

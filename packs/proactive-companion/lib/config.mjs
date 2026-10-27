@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export const CONFIG_KEYS = [
-  'enabled', 'targetOpenid', 'dailyMax', 'minIntervalHours', 'dndStart', 'dndEnd',
+  'enabled', 'targetOpenid', 'dailyMax', 'maxUnanswered', 'minIntervalHours', 'dndStart', 'dndEnd',
   'windowGreetingEnabled', 'morningEnabled', 'morningStart', 'morningEnd',
   'afternoonEnabled', 'afternoonStart', 'afternoonEnd', 'eveningEnabled',
   'eveningStart', 'eveningEnd', 'nightEnabled', 'nightStart', 'nightEnd',
@@ -58,6 +58,7 @@ export function normalizeConfig(value = {}) {
   const time = (v, fallback) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(v || '')) ? v : fallback;
   out.enabled = out.enabled !== false;
   out.dailyMax = Number.isInteger(Number(out.dailyMax)) && Number(out.dailyMax) >= 0 ? Number(out.dailyMax) : 5;
+  out.maxUnanswered = Number.isInteger(Number(out.maxUnanswered)) && Number(out.maxUnanswered) >= 0 ? Number(out.maxUnanswered) : 3;
   out.minIntervalHours = value.minIntervalHours !== null && String(out.minIntervalHours ?? "").trim() !== "" && Number.isFinite(Number(out.minIntervalHours)) && Number(out.minIntervalHours) >= 0 ? Number(out.minIntervalHours) : 2.5;
   out.idleHoursThreshold = Number.isFinite(Number(out.idleHoursThreshold)) && Number(out.idleHoursThreshold) >= 0 ? Number(out.idleHoursThreshold) : 3;
   out.idleMinutesThreshold = Math.max(1, positive(out.idleMinutesThreshold, 30));

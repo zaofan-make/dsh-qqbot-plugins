@@ -31,7 +31,7 @@ try {
   assert.equal(readExtConfig(env).consecutiveBubblesWithoutReply,1);
   assert.equal(readExtConfig(env).lastInteractionTs,now-120000);
   assert.equal((await checkCompanion(env)).reason,'cooldown');
-  save({minIntervalHours:0,lastBubbleTs:now-1000,consecutiveBubblesWithoutReply:1});
+  save({minIntervalHours:0,lastBubbleTs:now-1000,consecutiveBubblesWithoutReply:2});
   assert.equal(readExtConfig(env).minIntervalHours,0);
   assert.equal((await checkCompanion(env)).reason,'queued','zero interval disables cooldown');
   assert.equal((await checkCompanion(env)).reason,'awaiting_reply','zero cooldown retains unanswered protection');
@@ -45,7 +45,7 @@ try {
   assert.equal((await checkCompanion(env)).reason,'daily_limit');
   save({mutedDate:localDate()});
   assert.equal((await checkCompanion(env)).reason,'muted_today');
-  save({consecutiveBubblesWithoutReply:2,lastBubbleTs:now-60000});
+  save({consecutiveBubblesWithoutReply:3,lastBubbleTs:now-60000});
   assert.equal((await checkCompanion(env)).reason,'awaiting_reply');
   save();
   fixture.manager.accepted=false;

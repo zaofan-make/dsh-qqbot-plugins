@@ -2,7 +2,7 @@
   "name": "主动陪伴与私聊关怀",
   "id": "proactive-companion",
   "author": "TGSWYH",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "专为 dsh-qqbot 打造的主动陪伴与智能冒泡扩展包。支持作息时段关怀与空闲超时冒泡双路线并行、多层频控退避与夜间免打扰，告别机器人“你不找她她就不找你”的距离感。",
   "tags": [
     "陪伴",
@@ -10,6 +10,5 @@
     "私聊",
     "日常"
   ],
-  "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
-  "minPluginVersion": "1.10.44"
+  "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins"
 }

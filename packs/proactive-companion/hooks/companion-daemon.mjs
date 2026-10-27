@@ -36,8 +36,9 @@ export const qqbotSettingsPage = {
     // 全局基础配置
     { key: 'enabled', type: 'bool', label: '启用主动关怀总开关', default: true, hint: '总开关：关闭后将停止一切主动问候与冒泡' },
     { key: 'targetOpenid', type: 'string', label: '主人 OpenID', default: '', hint: '接收主动关怀的目标私聊 OpenID（留空时仅回退到宿主提供的主人列表；支持在私聊中输入 /openid 自动填入）' },
+    { key: 'maxUnanswered', type: 'number', label: '连续无应答休眠上限', default: 3, hint: '连续主动关怀达到该次数且未收到对方回复时自动休眠（路线一与路线二共享计数，默认 3 次）；0 表示不休眠' },
     { key: 'dailyMax', type: 'number', label: '每天最大关怀次数', default: 5, hint: '两条路线共享每日额度（默认 5 次）；0 表示不限每日次数，仍遵守免打扰、冷却和未回复保护'  },
-    { key: 'minIntervalHours', type: 'number', label: '两次关怀最小间隔(小时)', default: 2.5, hint: '两次主动发送之间的最小冷却时间（默认 2.5 小时）；0 表示关闭冷却，仍遵守其他保护规则' },
+    { key: 'minIntervalHours', type: 'number', label: '两次关怀最小间隔(小时)', default: 0.5, hint: '两次主动发送之间的最小冷却时间（默认 0.5 小时）；0 表示关闭冷却，仍遵守其他保护规则' },
     { key: 'dndStart', type: 'string', label: '免打扰开始时间', default: '23:30', hint: '夜间免打扰起始（24小时制 HH:mm）' },
     { key: 'dndEnd', type: 'string', label: '免打扰结束时间', default: '08:30', hint: '早晨免打扰结束（24小时制 HH:mm）' },
 
@@ -61,7 +62,7 @@ export const qqbotSettingsPage = {
 
     // 路线二：空闲超时主动冒泡
     { key: 'idlePokeEnabled', type: 'bool', label: '【路线二】开启空闲超时主动冒泡', default: true, hint: '当主人较长时间未发消息时，主动戳一下主人' },
-    { key: 'idleHoursThreshold', type: 'number', label: '└─ 空闲超时阈值(小时)', default: 3, hint: '默认 3 小时；大于 0 使用小时阈值，设为 0 使用下方分钟阈值'  },
+    { key: 'idleHoursThreshold', type: 'number', label: '└─ 空闲超时阈值(小时)', default: 1, hint: '默认 1 小时；大于 0 使用小时阈值，设为 0 使用下方分钟阈值'  },
     { key: 'idleMinutesThreshold', type: 'number', label: '└─ 空闲超时阈值(分钟)', default: 30, hint: '仅小时为 0 时生效；最少 1 分钟' },
   ],
 };
@@ -124,7 +125,8 @@ async function inspectCompanion(env, { manual = false } = {}) {
   if (state.mutedDate===today) return finish('muted_today');
   if (state.dailyMax > 0 && state.dailyCount >= state.dailyMax) return finish('daily_limit');
   if (inRange(hhmm,state.dndStart,state.dndEnd)) return finish('dnd');
-  if (state.consecutiveBubblesWithoutReply >= 2) return finish('awaiting_reply');
+  const maxUnanswered = state.maxUnanswered != null ? Number(state.maxUnanswered) : 3;
+  if (maxUnanswered > 0 && state.consecutiveBubblesWithoutReply >= maxUnanswered) return finish('awaiting_reply');
   const cooldown=state.minIntervalHours*3600000*(state.consecutiveBubblesWithoutReply>0?1.6:1);
   if (state.lastBubbleTs && now-state.lastBubbleTs < cooldown) return finish('cooldown');
   let scenario=manual?'manual':'';

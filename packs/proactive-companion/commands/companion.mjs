@@ -119,7 +119,7 @@ export default {
       const key = (parts[1] || '').toLowerCase();
       const val = parts[2];
       if (!key || val == null) {
-        return '用法说明：\n/openid                       — 自动获取当前私聊 OpenID 并填入设置\n/companion set id <openid>    — 手动设置主人 OpenID\n/companion set idle <小时数，0 使用分钟阈值>\n/companion set minutes <分钟数，默认 30>\n/companion set window <on|off>\n/companion set poke <on|off>\n/companion set max <每天最大次数，0 无上限>\n/companion set interval <最小冷却小时数>\n/companion set dnd <HH:mm> <HH:mm>';
+        return '用法说明：\n/openid                       — 自动获取当前私聊 OpenID 并填入设置\n/companion set id <openid>    — 手动设置主人 OpenID\n/companion set unanswered <次数> — 连续无应答休眠上限（默认 3 次，0 表示不休眠）\n/companion set idle <小时数，0 使用分钟阈值>\n/companion set minutes <分钟数，默认 30>\n/companion set window <on|off>\n/companion set poke <on|off>\n/companion set max <每天最大次数，0 无上限>\n/companion set interval <最小冷却小时数>\n/companion set dnd <HH:mm> <HH:mm>';
       }
 
       if (key === 'id' || key === 'openid' || key === 'target') {
@@ -128,6 +128,14 @@ export default {
         conf.targetOpenid = safe;
         await save();
         return `【主动陪伴】主人 OpenID 已设置为：${safe}`;
+      }
+
+      if (key === 'unanswered') {
+        const num = parseNumber(val, true, true);
+        if (num == null) return '错误：连续无应答休眠上限必须为非负整数；0 表示关闭休眠限制';
+        conf.maxUnanswered = num;
+        await save();
+        return num === 0 ? '【主动陪伴】连续无应答休眠熔断已关闭（永不休眠）。' : `【主动陪伴】连续无应答休眠上限已设置为 ${num} 次。`;
       }
 
       if (key === 'idle') {
@@ -220,7 +228,7 @@ export default {
       `  • 今日静音：${conf.mutedDate === today ? '已开启' : '未开启'}`,
       `  • 两次关怀最小冷却：${conf.minIntervalHours} 小时`,
       `  • 夜间免打扰时段：${conf.dndStart} ~ ${conf.dndEnd}`,
-      `  • 连续无应答次数：${conf.consecutiveBubblesWithoutReply}${conf.consecutiveBubblesWithoutReply >= 2 ? ' (💤已触发休眠熔断)' : ''}`,
+      `  • 连续无应答次数：${conf.consecutiveBubblesWithoutReply}${conf.maxUnanswered > 0 ? ` / ${conf.maxUnanswered}` : ' (不限制)'}${conf.maxUnanswered > 0 && conf.consecutiveBubblesWithoutReply >= conf.maxUnanswered ? ' (💤已触发休眠熔断，私聊回复任意消息即可唤醒)' : ''}`,
       ``,
       `🔎 【运行诊断】`,
       `  • 最近检查原因：${conf.lastCheckReason || '暂无'}`,

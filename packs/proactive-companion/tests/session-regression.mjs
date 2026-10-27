@@ -46,7 +46,7 @@ try {
   if (new Date().getHours() !== 23 || new Date().getMinutes() !== 59) {
     assert.equal((await checkCompanion(env, { manual: true })).reason, 'dnd');
   }
-  save({ consecutiveBubblesWithoutReply: 2 });
+  save({ consecutiveBubblesWithoutReply: 3 });
   assert.equal((await checkCompanion(env, { manual: true })).reason, 'awaiting_reply');
   save();
   const ctx = { env, isOwner: true, command: { raw: 'test' } };
@@ -59,5 +59,23 @@ try {
   assert.equal(readExtConfig(env).dailyCount, before.dailyCount);
   assert.equal(readExtConfig(env).lastBubbleTs, before.lastBubbleTs);
   assert.match(readExtConfig(env).lastSendError, /WAKE_REJECTED/);
-  console.log('PASS session regression: exact instance and target, context prompt, no delivery claim, shared quotas, fail-closed wake');
+
+  // Evicted session recovery regression: when active table misses, getOrCreate restores the session
+  let createdCalled = false;
+  const evictedRegistry = {
+    managersOf: () => [{
+      dataRoot: root,
+      config: { appId: 'test-app' },
+      findByPeer: () => undefined,
+      getOrCreate: async (scope, peerId) => {
+        createdCalled = true;
+        return { scope, peerId };
+      },
+      injectToPeer: async (...args) => { calls.push(args); return true; },
+    }],
+  };
+  assert.deepEqual(await wakeWithRegistries(env, 'owner', prompt, [evictedRegistry]), { accepted: true, mode: 'original_session' });
+  assert.equal(createdCalled, true, 'evicted session must be restored via getOrCreate');
+
+  console.log('PASS session regression: exact instance and target, context prompt, no delivery claim, shared quotas, fail-closed wake, evicted session auto-recovery');
 } finally { fixture.restore(); rmSync(root, { recursive: true, force: true }); }

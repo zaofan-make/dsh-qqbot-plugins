@@ -174,28 +174,3 @@ export async function sendCompanionText(env, target, text) {
   if (creds) return sendDirect(creds, path, body);
   throw failure('transport', 'NO_CREDENTIALS');
 }
-
-/**
- * ★ Ask the host to WAKE the AI for an explicit C2C peer (2026-10-13).
- *
- * This is the preferred delivery path: instead of shipping a canned template,
- * the daemon injects a simulated user message into the target conversation and
- * lets the AI answer in character. The host sends the AI's own reply to QQ, so
- * what the user receives is a real turn, not boilerplate.
- *
- * Returns true only when the host confirms delivery. Hosts without
- * caps.wakeTo (older builds) return false so callers fall back to templates.
- * Never throws: a wake failure must not lose the fallback opportunity.
- */
-export async function wakeCompanion(env, target, prompt) {
-  const caps = env?.caps;
-  const wakeTo = caps?.wakeTo;
-  if (typeof wakeTo !== 'function') return false;
-  if (typeof target !== 'string' || !target.trim()) return false;
-  if (typeof prompt !== 'string' || !prompt.trim()) return false;
-  try {
-    return (await wakeTo.call(caps, 'c2c', target.trim(), prompt)) === true;
-  } catch {
-    return false;
-  }
-}

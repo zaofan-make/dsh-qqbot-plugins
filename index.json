@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-10-26",
+  "updated": "2026-10-27",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
@@ -58,8 +58,7 @@
       "id": "proactive-companion",
       "name": "主动陪伴与私聊关怀",
       "author": "TGSWYH",
-      "version": "1.0.8",
-      "minPluginVersion": "1.10.44",
+      "version": "1.1.0",
       "description": "专为 dsh-qqbot 打造的主动陪伴与智能冒泡扩展包。支持作息时段关怀与空闲超时冒泡双路线并行、多层频控退避与夜间免打扰，告别机器人“你不找她她就不找你”的距离感。",
       "repo": "zaofan-make/dsh-qqbot-plugins",
       "path": "packs/proactive-companion",
@@ -75,7 +74,6 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/companion-id.mjs",
         "commands/companion.mjs",
         "cover.png",
@@ -85,6 +83,7 @@
         "lib/transport.mjs",
         "preview.png",
         "qqbot-pack.json",
+        "README.md",
         "tools/companion_manage.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
@@ -137,7 +136,6 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/tts.mjs",
         "cover.png",
         "docs/01-open-tts-model.png",
@@ -146,6 +144,7 @@
         "lib/voices.mjs",
         "outbound/volcengintts.mjs",
         "qqbot-pack.json",
+        "README.md",
         "tools/tts_voice.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
