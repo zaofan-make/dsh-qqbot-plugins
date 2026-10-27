@@ -74,6 +74,7 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/companion-id.mjs",
         "commands/companion.mjs",
         "cover.png",
@@ -83,7 +84,6 @@
         "lib/transport.mjs",
         "preview.png",
         "qqbot-pack.json",
-        "README.md",
         "tools/companion_manage.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
@@ -136,6 +136,7 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/tts.mjs",
         "cover.png",
         "docs/01-open-tts-model.png",
@@ -144,7 +145,6 @@
         "lib/voices.mjs",
         "outbound/volcengintts.mjs",
         "qqbot-pack.json",
-        "README.md",
         "tools/tts_voice.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
