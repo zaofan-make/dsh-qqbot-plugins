@@ -17,13 +17,17 @@
       ],
       "kinds": [
         "commands",
-        "tools"
+        "tools",
+        "ui"
       ],
       "files": [
         "commands/打包示例.mjs",
         "cover.png",
         "qqbot-pack.json",
-        "tools/hello-pack.mjs"
+        "tools/hello-pack.mjs",
+        "ui/hello/card.css",
+        "ui/hello/card.html",
+        "ui/hello/card.js"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/demo-author/cover.png"
