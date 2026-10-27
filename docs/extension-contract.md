@@ -46,6 +46,28 @@
 
 ### 第六套：`ui/` —— 自定义界面卡片（2026-10-26 新增）
 
+> ⚠️ **先分清两件事，别混**：
+>
+> | | `qqbotSettingsPage`（老，§2 末尾那个 schema） | `ui/` 卡片（本节的） |
+> |---|---|---|
+> | 写在哪 | 扩展 `.mjs` 里 `export const qqbotSettingsPage = { schema }` | 独立目录 `ui/<id>/card.html` |
+> | 长什么样 | 面板按 schema **自动渲染表单**（开关/输入框/下拉） | 你写的**任意 HTML** |
+> | 入口在哪 | 扩展卡片上的 **⚙ 设置** 按钮 → 弹窗 | **设置页顶栏** 或 **悬浮球面板**的页签 |
+> | 数据怎么存 | 面板帮你存成 JSON，扩展里 `ctx.config` 读 | 自己管（`getConfig` / `store` / 自己写文件） |
+> | 适合什么 | 几个配置项，越快越好 | 复杂界面（列表、按钮、图表、实时数据） |
+>
+> 简言之：**设置表单是"填空"，UI 卡片是"画图"**。两者可以同时存在 ——
+> 一个扩展既能声明 schema 让用户填 API Key，也能给一张卡片展示运行状态。
+
+**两张图一眼分清**（看各自框住的那块，不是整页）：
+
+| ① `ui/` 界面卡片 | ② `qqbotSettingsPage` 设置表单 |
+|---|---|
+| ![ui 卡片](images/ext-panel-vs-form-1.png) | ![schema 设置表单](images/ext-panel-vs-form-2.png) |
+| **右边那个悬浮球面板** —— 顶栏多出一个「🔌 扩展示例」页签，<br>里面是扩展自己写的 HTML（五个子标签、输入框、按钮全自己画）。<br>入口：**设置页顶栏 / 悬浮球面板的页签** | 点扩展包上的 **⚙ 设置** 弹出的这个 ——<br>面板按 `schema` **自动渲染**出下拉 / 输入框 / 复选框，<br>长什么样不是扩展决定的。入口：**扩展卡片上的 ⚙ 按钮** |
+
+
+
 前五套是「代码模块」，`ui/` 是**静态资源**（html/css/js），由面板加载到 **Shadow DOM** 里跑。
 它不参与 `import()`，所以放错位置只会被静默跳过，不会报错。
 
@@ -93,7 +115,8 @@ qqbotExt.dock.peerId / scope / ns
 qqbotExt.dock.dataRoot / cwd
 qqbotExt.dock.context()             // 实例 + 会话信息
 qqbotExt.dock.sessions()            // 这个机器人管过哪些会话
-qqbotExt.dock.history(n)            // 当前会话最近 n 条消息
+qqbotExt.dock.history(n)            // 当前会话最近 n 条消息（QQ 消息流水）
+qqbotExt.dock.lastAssistantText()   // ★ AI 最后一个正文块（她真正输出的那段话）
 qqbotExt.dock.members()             // 群友台账
 
 // 能力（与代码扩展对齐，走白名单 RPC）
@@ -109,7 +132,34 @@ qqbotExt.cap('text' | 'markdown', 文本)  // 发消息
 
 // 自己的后端（见 §7）
 qqbotExt.api('/你的路由')            // → /api/ext/dispatch?id=<你>&p=/你的路由
+
+// 主题
+qqbotExt.theme                       // 'light' | 'dark'
+qqbotExt.isDark()
+qqbotExt.onThemeChange(cb)           // 返回取消函数
 ```
+
+**让卡片跟着宿主主题变**：插件在 `body` 上定义了一套 `--qqs-*` token，亮/暗两套自动切换，
+而 **CSS 自定义属性会穿透 Shadow DOM** —— 所以卡片里直接用变量就行，不用自己判断：
+
+```css
+.card {
+  background: var(--qqs-card, #fff);
+  color: var(--qqs-text, #1f2329);
+  border: 1px solid var(--qqs-border, #e6e8ec);
+}
+```
+
+可用 token：
+
+| 类别 | 变量 |
+|---|---|
+| 背景 | `--qqs-card` `--qqs-panel` `--qqs-card-solid` `--qqs-input` `--qqs-toolbar` |
+| 文字 | `--qqs-text` `--qqs-text2` `--qqs-text3` |
+| 边框 | `--qqs-border` `--qqs-border-light` |
+| 主题色 | `--qqs-primary-bg` `--qqs-primary-border` `--qqs-primary-fg` |
+
+**一定要带 fallback**（`var(--qqs-text, #1f2329)`）—— 老版本宿主的 token 可能不全。
 
 **写卡片的几条硬边界**（都是设计如此，不是 bug）：
 
