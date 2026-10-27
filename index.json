@@ -8,12 +8,14 @@
       "name": "示例扩展包",
       "author": "做早饭",
       "version": "1.0.0",
-      "description": "演示：扩展放在独立目录里，按 tools/commands/… 结构摆放，面板会按包分组显示",
+      "minPluginVersion": "1.11.0",
+      "description": "演示：扩展放在独立目录里，按 tools/commands/ui 结构摆放；带一张界面卡片（需插件 v1.11.0+）",
       "repo": "zaofan-make/dsh-qqbot-plugins",
       "path": "packs/demo-author",
       "tags": [
         "示例",
-        "入门"
+        "入门",
+        "界面"
       ],
       "kinds": [
         "commands",
