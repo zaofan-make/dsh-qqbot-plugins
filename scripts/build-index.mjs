@@ -24,14 +24,18 @@ const ROOT = process.cwd();
 const PACKS_DIR = join(ROOT, 'packs');
 const OUT = join(ROOT, 'index.json');
 const EXTS = new Set(['.mjs', '.js', '.cjs']);
-const KINDS = ['tools', 'commands', 'hooks', 'inbound', 'outbound', 'botplay'];
+const KINDS = ['tools', 'commands', 'hooks', 'inbound', 'outbound', 'botplay', 'ui'];
+// ★ 2026-10-27：加了 'ui' —— 扩展包可以带自己的界面卡片（v1.11.0 起）。
+//   ui/ 里是 .html/.css/.js，和代码扩展点不一样：它不走 import，只是静态资源。
 // 2026-10-25 修：原来的 files 过滤只认 KINDS 目录 + 只收 .mjs/.js/.cjs，
 //   于是 lib/（被 import 的共享代码）和 qqbot-pack.json / README / 封面全被漏掉。
 //   症状：安装器按 index.json 的 files 下载 → 装出来的包缺 lib → 作者代码一 import 就崩。
 const ROOT_FILES = new Set(['qqbot-pack.json', 'README.md', 'cover.png', 'preview.png', 'LICENSE']);
-const SHARED_DIRS = new Set(['lib', 'docs']);
+const SHARED_DIRS = new Set(['lib', 'docs', 'ui']);
 /** 文档目录里允许分发的图片（README 引用的截图要能跟着包走，否则市场页和图都挂） */
 const ASSET_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+/** ui/ 目录里允许的静态资源扩展名 */
+const UI_EXTS = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.svg']);
 const COVER_RE = /^cover\.(png|jpe?g|webp|gif)$/i;
 
 const REPO = process.env.GITHUB_REPOSITORY || 'zaofan-make/dsh-qqbot-plugins';
@@ -102,6 +106,8 @@ for (const id of packDirs.sort()) {
     // ① 包根文件：元数据 / 说明 / 封面，一律收
     if (segs.length === 1) return ROOT_FILES.has(top);
     // ② lib/ 等共享代码目录：脚本与 json 都收
+    // ui/ 里是静态资源：.html / .css / .js 都要收，否则装出来是空卡片
+    if (top === 'ui') return UI_EXTS.has(ext) || ext === '.json' || ASSET_EXTS.has(ext);
     if (SHARED_DIRS.has(top)) return EXTS.has(ext) || ext === '.json' || ASSET_EXTS.has(ext);
     // ③ 扩展点目录：仍只收脚本
     return KINDS.includes(top) && EXTS.has(ext);

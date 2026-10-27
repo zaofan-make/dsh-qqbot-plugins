@@ -28,7 +28,7 @@
 
 ---
 
-## 1. 五套扩展点：目录、时机、拿到什么
+## 1. 扩展点总览：五套代码扩展 + 一套 UI 扩展
 
 全部位于 **`{数据根}/.qqbot-extensions/`** 下（数据根 = 工作目录里的 `dshqqbot/`）：
 
@@ -44,9 +44,154 @@
 子目录不扫描（可放私有模块）。改完文件调 `tools_reload`（或 `/tools-reload`）**即时生效**；
 扩展命令需要重启宿主。
 
+### 第六套：`ui/` —— 自定义界面卡片（2026-10-26 新增）
+
+前五套是「代码模块」，`ui/` 是**静态资源**（html/css/js），由面板加载到 **Shadow DOM** 里跑。
+它不参与 `import()`，所以放错位置只会被静默跳过，不会报错。
+
+**两个源，按 slot 分**（放错源就不显示）：
+
+| slot | 界面位置 | 放哪 | 语义 |
+|---|---|---|---|
+| `settings` | 设置页顶栏多一个页签 | `{PROFILE_ROOT}/.qqbot-extensions/ui/<目录>/` | **profile 级**，全局一份 |
+| `dock` | 悬浮球面板多一个页签 | `{dataRoot}/.qqbot-extensions/ui/<目录>/` | **每实例一份**（能读当前会话数据） |
+
+目录里放三个文件（都可不写，写什么加载什么）：
+
+```
+card.html   必需（没有它这个扩展就不出现）
+card.css    可选，样式
+card.js     可选，逻辑
+```
+
+**元信息**写在 `card.html` 前 2KB 的注释里：
+
+```html
+<!-- qqbot-ui: { "id": "demo", "slot": "dock", "title": "🔌 扩展示例", "order": 5 } -->
+```
+
+- `id` 可选：覆盖目录名。**同一个扩展的两张卡（settings + dock）应该给相同的 id**，
+  这样它们共用同一份配置（`getConfig()`）；不给 id 就用目录名。
+- `slot` 必填：`settings` 或 `dock`。
+- `title` 页签文字；`order` 排序（小的在前，默认 100）。
+
+**卡片里能用的东西**（`card.js` 里有两个全局变量：`qqbotExt` 和 `shadowRoot`）：
+
+```js
+// 身份
+qqbotExt.extId                      // 你的扩展 id
+
+// 配置（两级，见 §2.1）
+qqbotExt.getConfig()                // 默认作用域（settings 卡=profile，dock 卡=data）
+qqbotExt.getConfig('profile' | 'data')
+qqbotExt.setConfig({...})           // 同理
+qqbotExt.acct                       // 当前选中的账号 {id, ns, cwd, dataRoot, appId}
+
+// 会话（只有 dock 卡有）
+qqbotExt.dock.sid                   // 当前 web 会话 id（宿主 agent 表按它索引）
+qqbotExt.dock.peerId / scope / ns
+qqbotExt.dock.dataRoot / cwd
+qqbotExt.dock.context()             // 实例 + 会话信息
+qqbotExt.dock.sessions()            // 这个机器人管过哪些会话
+qqbotExt.dock.history(n)            // 当前会话最近 n 条消息
+qqbotExt.dock.members()             // 群友台账
+
+// 能力（与代码扩展对齐，走白名单 RPC）
+qqbotExt.store.load() / save(v)     // 数据根下的 KV
+qqbotExt.kernel.get('服务名')        // 宿主服务（同 env.kernel.get）
+qqbotExt.kernel.has('服务名')
+qqbotExt.log('日志')                 // 进宿主控制台
+qqbotExt.owners() / appIdOf()
+qqbotExt.cap('fs.read', 路径)        // 读文本文件（≤2MB，只放行文本扩展名）
+qqbotExt.cap('fs.write', 路径, 内容) // 写（自动备份 .bak-时间戳）
+qqbotExt.cap('appendSilent', 文本)   // 往当前会话静默注入一条消息（不唤醒 AI）
+qqbotExt.cap('text' | 'markdown', 文本)  // 发消息
+
+// 自己的后端（见 §7）
+qqbotExt.api('/你的路由')            // → /api/ext/dispatch?id=<你>&p=/你的路由
+```
+
+**写卡片的几条硬边界**（都是设计如此，不是 bug）：
+
+1. **样式双向隔离**：Shadow DOM 让卡片样式不污染面板，但**面板的 CSS 变量/组件样式也进不来**，得自己写。
+2. **碰不到面板 DOM**：`document.getElementById` 查不到外面 —— 只能操作**自己那张卡内部**。
+   卡片内部用 `shadowRoot.getElementById(...)`。
+3. **用不了面板的 React 组件**（`SButton` / `FieldRow` / `h`），只能手写原生元素。
+4. **没有构建步骤**：不能写 TS/JSX，不能 `import` npm 包（`card.js` 是用 `new Function` 执行的）。
+5. **一切数据走后端**：浏览器沙箱碰不了文件系统 —— 要读 SQLite/扫目录/跑 shell，
+   都在 `hooks/` 或 `tools/` 里做完，`registerRoute` 注册成路由，卡片用 `api()` 取。
+
+**崩溃隔离**：卡片脚本报错只白自己那张卡（外面套了 try/catch），不影响面板其他部分。
+
+**两张图看懂**（都是 `examples/ext-ui/demo/` 跑出来的真实效果）：
+
+设置页那张 —— 一张**全局 UI** 也能操作当前选中账号：
+
+![设置页扩展卡片](images/ext-ui-settings.png)
+
+dock 那张 —— 五个子标签，右边三个演示了 dock 独有的能力（读会话数据 / 读写文件 / 静默注入）：
+
+![dock 扩展卡片](images/ext-ui-dock.png)
+
+**示例**：`examples/ext-ui/demo/`（`settings/` + `dock/` 两套，启动时自动铺到对应位置）。
+`examples/ext-commands/扩展示例.mjs` 是配套的 `/扩展示例` 命令，演示「全局改 + 实例改 +
+命令读两级配置」的完整链路。
+
 ---
 
-## 2. 统一能力包（五套都有）
+## 2. 统一能力包（五套代码扩展都有）
+
+> `ui/` 卡片拿到的是**子集**，见 §1 末尾「卡片里能用的东西」——浏览器里没有 kernel、
+> 没有 sender，服务端能力一律走 `/api/ext/dispatch?p=/__cap` 白名单 RPC。
+
+### 2.1 扩展自己的配置：两级作用域
+
+扩展可以有自己的配置，**存在两级**，互不干扰：
+
+| 作用域 | 文件位置 | 谁在用 | 语义 |
+|---|---|---|---|
+| `profile` | `{PROFILE_ROOT}/.qqbot-extensions/.state/ext-config/<id>.json` | 设置页的 UI 卡片（默认）、需要全局配置的代码扩展 | **所有机器人实例共用一份** |
+| `data` | `{dataRoot}/.qqbot-extensions/.state/ext-config/<id>.json` | dock 的 UI 卡片（默认） | **每个机器人实例各一份** |
+
+代码扩展里用 `env.getConfig?.(scope)` / `env.setConfig?.(patch, scope)`（老版本可能没有，
+自己读文件也行）；UI 卡片里就是 `qqbotExt.getConfig(scope)` / `setConfig(patch, scope)`。
+
+**取值建议：实例优先、全局兜底**。典型写法（见 `examples/ext-commands/扩展示例.mjs`）：
+
+```js
+const t1 = dataCfg.text1 || profileCfg.text1 || '(默认值)';
+```
+
+这样「全局」才是真正的**默认值**，用户给某个机器人单独调过就以那个为准 ——
+而不是硬性覆盖。
+
+**写前自动备份**：`setConfig` 落盘前会把旧文件存成 `.bak-<时间戳>`，改坏了能捞回来。
+
+### 2.2 注册自己的 HTTP 路由
+
+扩展想用自己的存储（SQLite / 自有 json / 任意目录），就得有办法把数据交给自己的 UI 卡片。
+在 `hooks/` 或 `tools/` 里注册：
+
+```js
+export default async (env) => {
+  env.registerRoute('GET', '/rows', async ({ query }) => myDb.all(...), '你的扩展id');
+  env.registerRoute('POST', '/add', async ({ body }) => { myDb.insert(body); return { ok: true }; }, '你的扩展id');
+};
+```
+
+卡片里：
+
+```js
+qqbotExt.api('/rows').then(r => r.data)
+```
+
+**实现细节**：实际请求走 `/api/ext/dispatch?id=<你的id>&p=/rows`，由宿主派发。
+handler 返回 `{ok:false,...}` 会原样透传，其它值包成 `{ok:true, data}`。
+`method` 传 `'*'` 表示任意方法都收。注册表放 `globalThis.__qqbotExtRoutes`（跨模块图）。
+
+**注意**：`hooks/` 是「插件启动时跑一次」，拿到的 `env.dataRoot` 是**插件级**的
+（主实例那份），不是当前机器人实例的。需要按实例工作时，从**请求参数**里取
+（`query.dataRoot` / `query.sid`），别依赖 `env.dataRoot`。
 
 成员**平铺**在你的 `env` / `ctx` 上，**同时**在命名空间 `env.caps` / `ctx.caps` 里也有一份。
 
@@ -75,6 +220,37 @@
 | 内核句柄 | `env.kernel`（工具侧也叫 `env.ctx`） | **全权限"遥控器"**：`ctx.get('服务名')` / `ctx.on(...)` / `ctx.webServer.register(...)`。⚠️ 形状跟随 dsh 版本；`register` 返回的 disposer 要自己收尾 |
 | 宿主自重启 | `await env.restart()` | 复用内置 `/bot-restart`（自动识别启动命令、强补 `--no-open`）。默认**仅主人**可触发；要放开写 `env.restart({ requireOwner: false })` |
 | 回调按钮卡 | `env.registerInteractionCard({cardId, buttonIds, expireAt})` | 发**带回调按钮**的卡片必须先登记，否则点了没人认 |
+
+### 扩展设置页的字段类型（schema）
+
+扩展文件里 `export const qqbotSettingsPage = { title, desc, schema: [...] }`，面板就会给它生成设置页。
+`schema` 每项支持：
+
+| type | 控件 | 说明 |
+| --- | --- | --- |
+| `bool` | 开关 | 值 true/false |
+| `number` | 数字框 | 值 number |
+| `string`（默认） | 输入框 | 加 `secret: true` 变密码框 |
+| `list` | 多行文本 | 一行一项，值 string[] |
+| `select` | 下拉 | `options` 可写字符串数组，也可写 `{ value, label }` |
+
+**`select` + `searchable: true`（1.10.46 起）**
+
+选项很多（几十上百条）时，原生 `<select>` 根本没法找。加上这个标记会渲染成
+`<input list="…"> + <datalist>`：浏览器原生**输入过滤**，并且**允许手填列表外的值**。
+
+```js
+{ key: 'defaultSpeaker', type: 'select', searchable: true, label: '默认音色',
+  default: 'Vivi 2.0｜zh_female_vv_uranus_bigtts',
+  options: VOICES.map(v => v.label) }   // ['中文名｜voice_type', ...]
+```
+
+⚠️ 两个必须注意的点：
+
+1. **`select` 取到的值永远是字符串**（`'24000'`，不是 `24000`）。
+   如果你的扩展要把它传给要求严格类型的第三方接口，**自己转数字**，否则会像 TTS 那样撞
+   `55000000 cannot unmarshal string into ... of type int`。
+2. 用 `中文名｜id` 这种复合值时，**读取侧要负责剥出真值**（本项目 TTS 包用 `pickSpeaker()` 统一处理）。
 
 ### 扩展包声明「最低插件版本」（1.10.44 起）
 

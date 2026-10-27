@@ -38,6 +38,12 @@ packs/<id>/
 `files` **必填**，列出 `path` 目录下**所有文件**（相对路径）。装的时候按这个清单逐个下载，
 不走 GitHub 目录 API —— 那个接口在墙内连不上。
 
+> ⚠️ 带界面卡片（`ui/`）的包，**`files` 里也要列上** `ui/<卡片>/card.html` 这些文件，
+> 否则装完卡片是空的。现有的 `build-index.mjs` 会自动扫全目录，不用手写。
+
+`kinds` 是包里带了哪几套扩展点（`tools` / `commands` / `hooks` / `inbound` / `outbound` /
+`botplay` / `ui`），面板据此显示标签。
+
 `cover` 可选，卡片封面。**两种写法都支持**（2026-10-26 起）：
 
 ```jsonc
@@ -99,9 +105,73 @@ export const qqbotSettingsPage = {
 };
 ```
 
+## 自带界面卡片（可选，v1.11.0 起）
+
+扩展包可以带**自己的界面** —— 用户装完之后，设置页或悬浮球里会多一个页签，
+里面跑的是你写的 HTML。
+
+放一个 `ui/` 目录：
+
+```
+packs/<你的包>/
+  ui/
+    <卡片目录>/
+      card.html      ← 必需
+      card.css       ← 可选
+      card.js        ← 可选
+```
+
+`card.html` 顶部注释声明元信息：
+
+```html
+<!-- qqbot-ui: { "id": "myui", "slot": "settings", "title": "我的面板", "order": 50 } -->
+```
+
+| 字段 | 说明 |
+|---|---|
+| `slot` | `settings`（设置页，全局一份）或 `dock`（悬浮球，每个机器人一份） |
+| `id` | 可选，覆盖目录名。两张卡想共用一份配置就给相同的 id |
+| `title` | 页签文字 |
+| `order` | 排序，小的在前（默认 100） |
+
+**装包时自动归位**：`slot=settings` 的卡片会被复制到用户的
+`{PROFILE_ROOT}/.qqbot-extensions/ui/<id>/`；`slot=dock` 的留在数据根不用动。
+**只补不改** —— 用户改过的不会被覆盖。
+
+**卡片里能用的 API**：
+
+```js
+qqbotExt.getConfig('profile' | 'data')     // 两级配置（全局 / 本实例）
+qqbotExt.setConfig({...}, scope)
+qqbotExt.store.load() / save(v)
+qqbotExt.kernel.get('服务名')               // 宿主服务
+qqbotExt.api('/你的路由')                   // 你在 hooks 里 registerRoute 的接口
+qqbotExt.cap('fs.read' | 'appendSilent' | 'text', ...)
+qqbotExt.dock.sid / peerId / context() / history(n)   // 仅 dock 卡
+```
+
+卡片跑在 **Shadow DOM** 里（样式与面板双向隔离、崩了只白自己那张卡）。
+
+装完之后大概长这样（左边设置页、右边悬浮球）：
+
+![设置页卡片](docs/images/ext-ui-settings.png)
+
+> 完整 API 和硬边界见插件仓库的
+> [`docs/extension-contract.md`](https://github.com/zaofan-make/dsh-qqbot/blob/main/docs/extension-contract.md)
+> §1 末尾「第六套：`ui/`」。
+>
+> 想抄现成的：插件自带示例 `examples/ext-ui/demo/`（settings + dock 两套）。
+
 ## 提交新插件
 
-直接提 PR：加 `packs/<id>/` 目录，并在 `index.json` 里补一条。
+加 `packs/<id>/` 目录，然后在本地跑一次构建：
+
+```bash
+node scripts/build-index.mjs    # 重新生成 index.json
+node scripts/check-packs.mjs    # 校验
+```
+
+提交时把 `packs/` 和 `index.json` 一起带上。
 
 ## 许可
 
