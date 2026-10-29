@@ -27,7 +27,7 @@
         "qqbot-pack.json",
         "tools/bili_share.mjs"
       ],
-      "homepage": "https://github.com/zaofan-make/dsh-qqbot",
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/bili-share/cover.png"
     },
     {
