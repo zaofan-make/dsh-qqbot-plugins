@@ -108,6 +108,10 @@ async function videoDetail(bvid, cookie) {
     desc: clean(d.desc || '').slice(0, 200),
     pic: httpsPic(d.pic),
     author: clean(d.owner?.name || ''),
+    // 详情接口的播放量在 stat.view（搜索结果里才叫 play）—— 原来漏了这句，
+    // 所以卡片 description 永远拼不出"· N万播放"（主人实测）
+    play: Number(d.stat?.view) || 0,
+    like: Number(d.stat?.like) || 0,
     duration: durOf(d.duration),
     url: `https://www.bilibili.com/video/${d.bvid || bvid}`,
   };
