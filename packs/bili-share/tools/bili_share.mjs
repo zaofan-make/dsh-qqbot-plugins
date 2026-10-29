@@ -172,7 +172,7 @@ export default {
     index: { type: 'integer', description: '搜到多条时分享第几条（1 起，默认 1）' },
     dryRun: { type: 'boolean', description: 'true=只把卡片内容打给你看，不真的发出去' },
   },
-  run: async function (args, env) {
+  async run(args, env) {
     const cfg = readCfg(env);
     const sessdata = String(cfg.sessdata || process.env.BILI_SESSDATA || '').trim();
     const cookie = sessdata ? `SESSDATA=${sessdata}` : '';
@@ -216,7 +216,14 @@ export default {
         type: 'tuwen',
         content: {
           title: (info.title || '').slice(0, 50),
-          description: (info.desc || ('UP主：' + info.author) || info.title || '').slice(0, 200),
+          description: (function () {
+            // B 站不少视频的 desc 就是占位符 "-"，直接用它卡片上就只剩一个横杠（实测）
+            const d0 = String(info.desc || '').trim();
+            if (d0 && d0 !== '-' && d0 !== '——') return d0.slice(0, 200);
+            const up = info.author ? ('UP主：' + info.author) : '';
+            const play = info.play ? (' · ' + (info.play >= 10000 ? (info.play / 10000).toFixed(1) + '万' : String(info.play)) + '播放') : '';
+            return (up + play) || info.title || '';
+          })(),
           url: info.url,
           pic_url: info.pic,
         },
@@ -228,8 +235,9 @@ export default {
 
       if (!card.content.pic_url) return { ok: false, msg: '这条视频没有封面图，官方图文卡片要求 pic_url 必填' };
 
-      // 优先用插件封装好的 env.card（内部走 SDK 的 extra 透传 + 失败降级 markdown）；
-      // 老插件没有这个能力时，直接 HTTP 调官方接口（这条路 16:21 实测可行）。
+      // 优先走插件封装的 env.card（内部 extra 透传 + 失败降级 markdown）；失败再直连 HTTP 兜底。
+      // ⚠️ 2026-10-29 实测：卡片发不出去**多数是 QQ 主动消息窗口过期**（被动回复窗口只有几分钟），
+      //   不是封装坏了。窗口有效时封装一次就成；窗口过期时卡片会被拒、自动降级成 markdown。
       if (typeof env?.card === 'function') {
         const okCard = await env.card({
           title: card.content.title,
@@ -250,7 +258,7 @@ ${card.content.url}` };
 
       const md = `**${card.content.title}**\n\n${card.content.description}\n\n![](${card.content.pic_url})\n\n${card.content.url}`;
       const ok2 = await env.markdown(md);
-      const why = r?.err?.human || r?.err?.code || '未知';
+      const why = JSON.stringify((r && (r.err || r)) || {}).slice(0, 300);
       return {
         ok: ok2,
         msg: ok2

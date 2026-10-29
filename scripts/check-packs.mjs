@@ -155,7 +155,12 @@ for (const rel of targets) {
     const top = f.rel.split('/')[0];
     if (top === 'tools') {
       if (!/name\s*:/.test(src)) warn(id + ': ' + f.rel + ' 没看到 name 字段');
-      if (!/run\s*:/.test(src)) err(id + ': ' + f.rel + ' 缺 run 函数（工具契约要求 run）');
+      // 兼容两种合法写法：属性 `run: async (args, env) => {}` 与方法简写 `async run(args, env) {}`
+      // （2026-10-29：原来只认冒号写法，把合法的简写误判成"缺 run"——bili-share 就是这么被拦的；
+      //   与 commands 的 handler 检查保持同一套判据）
+      if (!/(?:^|[\s,{])(?:async\s+)?run\s*[:(]/m.test(src)) {
+        err(id + ': ' + f.rel + ' 缺 run 函数（工具契约要求 run）');
+      }
     } else if (top === 'commands') {
       if (!/name\s*:/.test(src)) warn(id + ': ' + f.rel + ' 没看到 name 字段');
       // 兼容两种合法写法：属性 `handler: async (ctx) => {}` 与方法简写 `async handler(ctx) {}`
