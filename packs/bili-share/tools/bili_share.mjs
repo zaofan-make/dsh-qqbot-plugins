@@ -172,7 +172,7 @@ export default {
     index: { type: 'integer', description: '搜到多条时分享第几条（1 起，默认 1）' },
     dryRun: { type: 'boolean', description: 'true=只把卡片内容打给你看，不真的发出去' },
   },
-  run: async function (args, env) {
+  async run(args, env) {
     const cfg = readCfg(env);
     const sessdata = String(cfg.sessdata || process.env.BILI_SESSDATA || '').trim();
     const cookie = sessdata ? `SESSDATA=${sessdata}` : '';
