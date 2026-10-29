@@ -61,7 +61,11 @@ try {
   assert.match(readExtConfig(env).lastSendError, /WAKE_REJECTED/);
 
   // Evicted session recovery regression: when active table misses, getOrCreate restores the session
+  // and channel healing tools must be invoked before injectToPeer to prevent UNKNOWN_TOOL.
   let createdCalled = false;
+  let healedTools = false;
+  let healedContext = false;
+  let healedRules = false;
   const evictedRegistry = {
     managersOf: () => [{
       dataRoot: root,
@@ -71,11 +75,17 @@ try {
         createdCalled = true;
         return { scope, peerId };
       },
+      ensureChannelTools: async (rec) => { if (rec.peerId === 'owner') healedTools = true; },
+      ensureChannelContext: async (rec) => { if (rec.peerId === 'owner') healedContext = true; },
+      ensureGroupRules: async (rec) => { if (rec.peerId === 'owner') healedRules = true; },
       injectToPeer: async (...args) => { calls.push(args); return true; },
     }],
   };
   assert.deepEqual(await wakeWithRegistries(env, 'owner', prompt, [evictedRegistry]), { accepted: true, mode: 'original_session' });
   assert.equal(createdCalled, true, 'evicted session must be restored via getOrCreate');
+  assert.equal(healedTools, true, 'channel tools must be healed on restored session');
+  assert.equal(healedContext, true, 'channel context must be healed on restored session');
+  assert.equal(healedRules, true, 'group rules must be healed on restored session');
 
-  console.log('PASS session regression: exact instance and target, context prompt, no delivery claim, shared quotas, fail-closed wake, evicted session auto-recovery');
+  console.log('PASS session regression: exact instance and target, context prompt, no delivery claim, shared quotas, fail-closed wake, evicted session auto-recovery & tools healing');
 } finally { fixture.restore(); rmSync(root, { recursive: true, force: true }); }

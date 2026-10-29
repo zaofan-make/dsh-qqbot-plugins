@@ -93,6 +93,21 @@ export async function wakeWithRegistries(env, target, prompt, sources) {
     } catch {}
   }
   if (!record || record.scope !== 'c2c' || record.peerId !== target) throw fail('SESSION_NOT_READY');
+
+  // Channel tools & context healing:
+  // When a session is evicted by host IdleEvictor, restoring it via getOrCreate bypasses the setup
+  // hook and inbound.js pipeline. We must heal channel tools (list_stickers, send_media, etc.),
+  // the qqChannel context instance, and group rules before injecting the prompt, preventing UNKNOWN_TOOL.
+  if (typeof manager.ensureChannelTools === 'function') {
+    try { await manager.ensureChannelTools(record); } catch {}
+  }
+  if (typeof manager.ensureChannelContext === 'function') {
+    try { await manager.ensureChannelContext(record); } catch {}
+  }
+  if (typeof manager.ensureGroupRules === 'function') {
+    try { await manager.ensureGroupRules(record); } catch {}
+  }
+
   let accepted;
   try { accepted = await manager.injectToPeer('c2c', target, prompt, 'subagent-settled'); }
   catch { throw fail('WAKE_FAILED'); }
