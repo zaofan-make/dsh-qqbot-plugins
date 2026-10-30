@@ -1,0 +1,16 @@
+{
+  "name": "群友头像下载",
+  "id": "qq-avatar",
+  "author": "做早饭",
+  "version": "1.0.0",
+  "minPluginVersion": "1.11.10",
+  "description": "下载群友 QQ 头像到本地目录。用 QQ 互联的 qqapp 直链（免鉴权、免 token），文件存到 {dataRoot}/.qqbot-extensions/.state/avatars。支持 AI 调用的工具 qq_avatar（可按昵称反查台账或直接给 openid），以及斜杠命令 /头像（不带参数=存自己的，带参数=存对方的）。",
+  "tags": [
+    "头像",
+    "QQ互联",
+    "qlogo",
+    "工具",
+    "斜杠命令"
+  ],
+  "homepage": "https://github.com/zaofan-make/dsh-qqbot"
+}
