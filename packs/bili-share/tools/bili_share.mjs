@@ -42,6 +42,8 @@ function readCfg(env) {
 }
 
 let WBI = { key: '', at: 0 };
+/** 空间接口最近一次失败原因（诊断用） */
+let lastSpaceErr = '';
 
 async function jget(url, cookie) {
   const headers = { 'User-Agent': UA, Referer: 'https://www.bilibili.com/' };
@@ -116,6 +118,81 @@ async function videoDetail(bvid, cookie) {
     url: `https://www.bilibili.com/video/${d.bvid || bvid}`,
   };
 }
+/** 搜 UP 主（issue #32：必须用 /wbi/ 新路径，旧路径匿名会返回风控 HTML） */
+async function searchUsers(keyword, n, cookie) {
+  const qs = await wbiQuery({ search_type: 'bili_user', keyword, page: '1', page_size: String(Math.max(5, n)) }, cookie);
+  const res = await jget('https://api.bilibili.com/x/web-interface/wbi/search/type?' + qs, cookie);
+  if (res?.code !== 0) throw new Error(`搜 UP 主失败 code=${res?.code} ${res?.message || ''}`);
+  return (res?.data?.result || []).slice(0, n).map((u) => ({
+    mid: String(u.mid || ''),
+    uname: clean(u.uname),
+    fans: Number(u.fans) || 0,
+    videos: Number(u.videos) || 0,
+    sign: clean(u.usign || '').slice(0, 80),
+  })).filter((u) => u.mid);
+}
+
+/**
+ * 按 UP 找投稿。
+ *
+ * 2026-10-30 实测更正（issue #32 是**匿名**下测的，所以撞 -352）：
+ *   带上 SESSDATA 后，正规的空间接口是通的 —— `/x/space/wbi/arc/search?mid=...` 返回 code=0。
+ * 所以策略是「两手」：
+ *   ① 首选空间接口（准确、能翻页、按投稿时间排序）
+ *   ② 失败（没填 SESSDATA / 仍被风控）→ 退回「多排序视频搜索 + 按 mid 过滤」
+ *      （totalrank / click / pubdate / dm 各取 20 条，issue #32 里验证过这条路能捞到冷门 UP）
+ */
+async function userVideosBySpace(mid, n, cookie) {
+  const qs = await wbiQuery({ mid: String(mid), ps: String(Math.min(30, Math.max(5, n))), pn: '1', order: 'pubdate' }, cookie);
+  const res = await jget(`https://api.bilibili.com/x/space/wbi/arc/search?${qs}`, cookie);
+  if (res?.code !== 0) {
+    // 诊断：失败原因带出来（-352 风控 / -799 频繁 / 其它）
+    lastSpaceErr = `code=${res?.code} ${res?.message || ''}`;
+    return null;
+  }
+  lastSpaceErr = '';
+  const vl = (res?.data?.list?.vlist) || [];
+  return vl.map((v) => ({
+    bvid: String(v.bvid || ''),
+    title: clean(v.title),
+    author: '',
+    play: Number(v.play) || 0,
+    duration: durOf(v.length),
+    created: Number(v.created) || 0,
+    via: '空间接口',
+  })).filter((v) => v.bvid);
+}
+
+async function userVideosBySearch(keyword, mid, n, cookie) {
+  const orders = ['totalrank', 'click', 'pubdate', 'dm'];
+  const seen = new Map();
+  for (const order of orders) {
+    let res;
+    try {
+      const qs = await wbiQuery({ search_type: 'video', keyword, page: '1', page_size: '20', order }, cookie);
+      res = await jget('https://api.bilibili.com/x/web-interface/wbi/search/type?' + qs, cookie);
+    } catch { continue; }
+    for (const v of (res?.data?.result || [])) {
+      const bvid = String(v.bvid || '');
+      if (!bvid || seen.has(bvid)) continue;
+      const vmid = String(v.mid ?? v.author_mid ?? '');
+      if (mid && vmid && vmid !== String(mid)) continue;
+      seen.set(bvid, {
+        bvid,
+        title: clean(v.title),
+        author: clean(v.author || ''),
+        play: Number(v.play) || 0,
+        duration: durOf(v.duration),
+        created: 0,
+        via: '搜索·' + order,
+      });
+      if (seen.size >= n) break;
+    }
+    if (seen.size >= n) break;
+  }
+  return [...seen.values()];
+}
+
 /**
  * 把封面图上传到 QQ 平台（官方 20261021「素材管理」），返回 qqbot-media:// 引用。
  *
@@ -170,7 +247,8 @@ export default {
     'B 站视频搜索并分享成【图文卡片】：给关键词 → 搜到视频 → 取封面/标题/简介/链接 → '
     + '发一张带封面的图文卡片（官方 msg_type=8）。也可只搜不分享（action=search），或直接用 bvid 分享。',
   inputSchema: {
-    action: { type: 'string', required: true, enum: ['search', 'share'], description: 'search=只搜结果给你看；share=搜到（或给了 bvid）就直接发图文卡片到当前会话' },
+    action: { type: 'string', required: true, enum: ['search', 'share', 'search_user', 'user_videos'], description: 'search=搜视频；share=搜到/给 bvid 就直接发图文卡片；search_user=搜 UP 主；user_videos=按 UP 主找投稿' },
+    mid: { type: 'string', description: 'UP 主的 mid（数字）；user_videos 用来精确过滤作者，search_user 的结果里有' },
     keyword: { type: 'string', description: '搜索关键词；action=share 且没给 bvid 时用它搜第一条' },
     bvid: { type: 'string', description: 'B 站视频号（如 BV1LBnP6xEi5）；也可直接给视频链接，工具会抠号' },
     index: { type: 'integer', description: '搜到多条时分享第几条（1 起，默认 1）' },
@@ -195,11 +273,56 @@ export default {
         const list = await searchVideos(keyword, pageSize, cookie);
         if (!list.length) return { ok: true, msg: `没搜到「${keyword}」的相关视频` };
         const lines = list.map((v, i) =>
-          `${i + 1}. ${v.title}\n   ${v.bvid} · ${v.author}${v.play ? ' · ' + v.play + ' 播放' : ''}${v.duration ? ' · ' + v.duration : ''}\n   ${v.desc || '(无简介)'}`).join('\n');
+          `${i + 1}. ${v.title}\n   ${v.bvid}${v.author ? ' · ' + v.author : ''}${v.play ? ' · ' + v.play + ' 播放' : ''}${v.duration ? ' · ' + v.duration : ''}\n   ${v.desc || '(无简介)'}`).join('\n');
         return { ok: true, msg: `B 站搜到 ${list.length} 条（action=share + bvid 或 index 分享）:\n${lines}` };
       }
 
-      if (action !== 'share') return { ok: false, msg: 'action 只能是 search / share' };
+      // ── 搜 UP 主 ──────────────────────────────────────────
+      if (action === 'search_user') {
+        if (!keyword) return { ok: false, msg: 'search_user 需要 keyword' };
+        const us = await searchUsers(keyword, pageSize, cookie);
+        if (!us.length) return { ok: true, msg: `没搜到「${keyword}」相关的 UP 主` };
+        const lines = us.map((u, i) =>
+          `${i + 1}. ${u.uname}（mid ${u.mid}）${u.fans} 粉 · ${u.videos} 稿
+   ${u.sign || '(无签名)'}`).join('\n');
+        return { ok: true, msg: `搜到 ${us.length} 个 UP 主（要看他投的视频就用 action=user_videos + keyword/mid）:
+${lines}` };
+      }
+
+      // ── 按 UP 找投稿（多排序 + 按 mid 过滤）───────────────────
+      if (action === 'user_videos') {
+        const midIn = String(args?.mid || '').trim();
+        if (!keyword && !midIn) return { ok: false, msg: 'user_videos 需要 keyword（UP 昵称）或 mid' };
+        let realMid = midIn;
+        if (!realMid && keyword) {
+          try {
+            const us = await searchUsers(keyword, 1, cookie);
+            if (us.length) realMid = us[0].mid;
+          } catch { /* 搜不到就退回搜索法 */ }
+        }
+        let list = null;
+        if (realMid) {
+          try { list = await userVideosBySpace(realMid, Math.max(pageSize, 8), cookie); } catch { list = null; }
+        }
+        let via = '空间接口';
+        if (!list || !list.length) {
+          if (!keyword) {
+            return { ok: false, msg: `空间接口不可用（${lastSpaceErr || '未知'}；没填 SESSDATA 会被风控）；请再给一个 keyword（他视频标题里的词），我退回搜索法按 mid 过滤` };
+          }
+          list = await userVideosBySearch(keyword, realMid, Math.max(pageSize, 8), cookie);
+          via = '多排序搜索';
+        }
+        if (!list.length) {
+          return { ok: true, msg: `没找到${realMid ? ' mid ' + realMid : '「' + keyword + '」'} 的投稿。可先用 action=search_user 确认昵称` };
+        }
+        const lines = list.map((v, i) =>
+          `${i + 1}. ${v.title}
+   ${v.bvid}${v.author ? ' · ' + v.author : ''}${v.play ? ' · ' + v.play + ' 播放' : ''}${v.duration ? ' · ' + v.duration : ''}（来源：${v.via}）`).join('\n');
+        return { ok: true, msg: `找到 ${list.length} 条投稿（用 action=share + bvid 发卡片）:
+${lines}` };
+      }
+
+      if (action !== 'share') return { ok: false, msg: 'action 只能是 search / share / search_user / user_videos' };
       let info;
       if (!bvid) {
         if (!keyword) return { ok: false, msg: 'action=share 需要 bvid 或 keyword' };
