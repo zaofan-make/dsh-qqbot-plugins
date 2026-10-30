@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-10-29",
+  "updated": "2026-10-30",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
@@ -121,6 +121,37 @@
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/proactive-companion/cover.png"
+    },
+    {
+      "id": "qq-avatar",
+      "name": "群友头像下载",
+      "author": "做早饭",
+      "version": "1.0.0",
+      "minPluginVersion": "1.11.10",
+      "description": "下载群友 QQ 头像到本地目录。用 QQ 互联的 qqapp 直链（免鉴权、免 token），文件存到 {dataRoot}/.qqbot-extensions/.state/avatars。支持 AI 调用的工具 qq_avatar（可按昵称反查台账或直接给 openid），以及斜杠命令 /头像（不带参数=存自己的，带参数=存对方的）。",
+      "repo": "zaofan-make/dsh-qqbot-plugins",
+      "path": "packs/qq-avatar",
+      "tags": [
+        "头像",
+        "QQ互联",
+        "qlogo",
+        "工具",
+        "斜杠命令"
+      ],
+      "kinds": [
+        "commands",
+        "tools"
+      ],
+      "files": [
+        "README.md",
+        "commands/头像.mjs",
+        "cover.png",
+        "lib/avatar.mjs",
+        "qqbot-pack.json",
+        "tools/qq_avatar.mjs"
+      ],
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot",
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/qq-avatar/cover.png"
     },
     {
       "id": "useful-tools",
