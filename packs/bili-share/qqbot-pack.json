@@ -1,16 +1,23 @@
 {
-  "name": "B站分享 · 视频卡片",
+  "name": "B站 视频读取 · 分享卡片",
   "id": "bili-share",
   "author": "做早饭",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minPluginVersion": "1.11.17",
-  "description": "搜 B 站视频并发成【图文卡片】（官方 msg_type=8，带封面大图 + 标题 + 简介 + 链接）。支持关键词搜索、按 BV 号直接分享、只看不发。搜索走 wbi 签名，可在设置里填 SESSDATA 提高稳定性。",
+  "description": "B站一条龙：搜视频发图文卡片（msg_type=8，封面+标题+简介+链接）；给 BV 号/链接/短链扒字幕（md/txt/srt）+ 简介 + 按画面变动智能抽帧拼长图，默认后台跑、跑完自动提醒、同时只抓一个。纯 cookie 不走浏览器，可填 SESSDATA 解锁 AI 字幕。",
   "tags": [
     "B站",
-    "视频",
-    "卡片",
+    "bilibili",
+    "字幕",
+    "抽帧",
+    "长图",
+    "storyboard",
     "分享",
-    "bilibili"
+    "卡片"
+  ],
+  "kinds": [
+    "tools",
+    "commands"
   ],
   "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins"
 }
