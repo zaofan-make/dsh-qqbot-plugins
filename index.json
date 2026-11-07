@@ -1,30 +1,41 @@
 {
   "version": 3,
-  "updated": "2026-10-30",
+  "updated": "2026-11-07",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
       "id": "bili-share",
-      "name": "B站分享 · 视频卡片",
+      "name": "B站 视频读取 · 分享卡片",
       "author": "做早饭",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minPluginVersion": "1.11.17",
-      "description": "搜 B 站视频并发成【图文卡片】（官方 msg_type=8，带封面大图 + 标题 + 简介 + 链接）。支持关键词搜索、按 BV 号直接分享、只看不发。搜索走 wbi 签名，可在设置里填 SESSDATA 提高稳定性。",
+      "description": "B站一条龙：搜视频发图文卡片（msg_type=8，封面+标题+简介+链接）；给 BV 号/链接/短链扒字幕（md/txt/srt）+ 简介 + 按画面变动智能抽帧拼长图，默认后台跑、跑完自动提醒、同时只抓一个。纯 cookie 不走浏览器，可填 SESSDATA 解锁 AI 字幕。",
       "repo": "zaofan-make/dsh-qqbot-plugins",
       "path": "packs/bili-share",
       "tags": [
         "B站",
-        "视频",
-        "卡片",
+        "bilibili",
+        "字幕",
+        "抽帧",
+        "长图",
+        "storyboard",
         "分享",
-        "bilibili"
+        "卡片"
       ],
       "kinds": [
+        "commands",
         "tools"
       ],
       "files": [
+        "README.md",
+        "commands/扒b站.mjs",
         "cover.png",
+        "lib/bili_current.mjs",
+        "lib/bili_queue.mjs",
+        "lib/bili_worker.mjs",
         "qqbot-pack.json",
+        "tools/bili_fetch.mjs",
+        "tools/bili_grab.mjs",
         "tools/bili_share.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
