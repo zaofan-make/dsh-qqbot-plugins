@@ -166,7 +166,6 @@ packs/bili-share/
     bili_share.mjs      搜视频 + 发图文卡片
     bili_grab.mjs       字幕 + 抽帧 + 后台队列（主逻辑）
     bili_fetch.mjs      抓取入口 / 命令模板
-    bili-tools/*.py     早期 Python 辅助脚本（备用）
   commands/
     扒b站.mjs           /扒b站 斜杠命令
   lib/
