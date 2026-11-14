@@ -17,7 +17,7 @@ import { ttsText } from '../lib/dskit-api.mjs';
 
 const GUIDE = [
   '【语音合成 · 用法（DeepSeek TTS）】',
-  '在正文里写标记，出站时会自动剥掉标记并合成语音发出去：',
+  '★ 日常就这么用：**不要调用任何工具**，直接在回复正文里写标记 —— 出站时自动合成语音发出去。',
   '  · 基本：[语音合成]主人早上好～[/语音合成]',
   '  · 换音色：[语音合成|tide]这句用男声读[/语音合成]（stella=女 / tide=男）',
   '  · 开闭同标记也认：[语音合成]你好[语音合成]',
@@ -33,8 +33,11 @@ const GUIDE = [
 export default {
   name: 'dskit_tts',
   description:
-    '语音合成：告诉你正文里怎么写 [语音合成] 标记（出站扩展负责真正合成发送），'
-    + '也能 action=test 合成一句试听、或 action=save 只存文件。',
+    '【发语音不要调用本工具】直接在回复正文里写标记即可：[语音合成]要读出来的话[/语音合成]，'
+    + '换音色写 [语音合成|tide]…[/语音合成]（stella=女声 / tide=男声）。'
+    + '出站扩展会自动剥掉标记、合成语音并作为语音消息发出，不额外产生请求。'
+    + '本工具**只**用于这三种情况：action=guide 查完整语法、'
+    + 'action=test 合成一句试听（验证 Key/音色配置）、action=save 只落地文件不发消息。',
   inputSchema: {
     action: { type: 'string', description: 'guide（默认，用法说明）| test（合成并发到当前会话）| save（只存文件）' },
     text: { type: 'string', description: 'action=test/save 时要朗读的文本' },
@@ -67,16 +70,35 @@ export default {
       if (action === 'save') return { ok: true, msg: `已合成：${file}（${r.buffer.length} 字节）` };
 
       let sent = false;
-      const sendVoice = env?.voice ?? env?.media;
-      if (typeof sendVoice === 'function') {
+      // ★ 2026-11-14：多通道兜底 + 说清为什么没发出去。
+      //   ① env.voice / env.media / env.caps.voice —— 扩展能力包（依赖 caps 里 sender 的方法，
+      //      插件 1.12.32 之前这里被 `{...sender}` 展开搞丢了原型方法 ⇒ 静默 false）
+      //   ② 直连 env.sender.sendMedia(env.replyTarget, …) —— 这条用的是**原对象**，最可靠
+      //   按顺序试，第一个成功的就停；全失败则把每一步的原因拼出来。
+      const direct = (env?.sender && typeof env.sender.sendMedia === 'function' && env?.replyTarget)
+        ? ((src) => env.sender.sendMedia(env.replyTarget, 'voice', { localPath: src }))
+        : undefined;
+      const attempts = [
+        ['env.voice', (typeof env?.voice === 'function' ? env.voice : undefined)],
+        ['env.media', (typeof env?.media === 'function' ? (s) => env.media('voice', s) : undefined)],
+        ['env.caps.voice', (typeof env?.caps?.voice === 'function' ? env.caps.voice : undefined)],
+        ['env.sender.sendMedia', direct],
+      ];
+      const why = [];
+      for (const [name, fn] of attempts) {
+        if (typeof fn !== 'function') { why.push(`${name}=无`); continue; }
         try {
-          const ok = await sendVoice(file);
-          sent = ok !== false;
-        } catch { /* 发不出去也不影响合成 */ }
+          const ok = await fn(file);
+          if (ok !== false) { sent = true; why.push(`${name}=ok`); break; }
+          why.push(`${name}=false`);
+        } catch (e) {
+          why.push(`${name}=抛错(${e instanceof Error ? e.message : String(e)})`);
+        }
       }
       return {
-        ok: true,
-        msg: `合成完成：${file}（${r.buffer.length} 字节）${sent ? '，已发到当前会话' : '，但发送失败（文件还在）'}`,
+        ok: sent,
+        msg: `合成完成：${file}（${r.buffer.length} 字节）`
+          + (sent ? '，已发到当前会话' : `，但没发出去 —— 通道尝试：[${why.join(' / ')}]`),
       };
     } catch (err) {
       return { ok: false, msg: String(err instanceof Error ? err.message : err) };

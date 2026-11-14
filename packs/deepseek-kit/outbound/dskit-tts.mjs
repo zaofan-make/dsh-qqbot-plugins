@@ -88,37 +88,88 @@ export default async function onOutbound(ctx, next) {
 
     const cleaned = original.replace(MARK_RE, '').replace(/[ \t]+\n/g, '\n').trim();
 
-    // 2) 没有剩余正文 = 纯语音
+    /** 合成一条并发送；返回 true=语音真的发出去了 */
+    const speakOne = async (job) => {
+      try {
+        const r = await ttsText({ cfg, text: job.text, voice: job.voice || cfg.ttsVoice, format: cfg.ttsFormat });
+        const dir = join(String(ctx?.dataRoot || '.'), '.qqbot-extensions', '.state', 'dskit', 'tts');
+        mkdirSync(dir, { recursive: true });
+        // ★ 2026-11-14（CodeRabbit 审查）：QQ 语音只认带头的音频容器。
+        //   设置里允许 pcm（裸采样），直接发会被当成未知二进制 ⇒ 发送失败、用户收不到任何东西。
+        //   这里统一包一层 WAV 头（24kHz / 16bit / 单声道，与设置页提示一致），文件名也落 .wav。
+        const isPcm = String(cfg.ttsFormat).toLowerCase() === 'pcm';
+        const buf = isPcm ? wrapWavPcm16(r.buffer) : r.buffer;
+        const ext = isPcm ? 'wav' : (cfg.ttsFormat === 'pcm' ? 'pcm' : 'wav');
+        const file = join(dir, `${randomUUID()}.${ext}`);
+        writeFileSync(file, buf);
+        const ok = await ctx.sendMedia({ path: file, kind: 'voice' });
+        if (ok === false) ctx.note?.(`[dskit-tts] 语音发送失败: ${file}`);
+        return ok !== false;
+      } catch (err) {
+        ctx.note?.(`[dskit-tts] 合成失败: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+      }
+    };
+
+    // 2) 纯语音：**先发成功、再消灭正文**
+    //    ★ 2026-11-14（CodeRabbit 审查）：原来先 ctx.annihilate 再丢后台合成 ——
+    //    合成抛错或发送返回 false 时，这条回复**彻底消失**（用户既没文字也没语音）。
+    //    现在改成：合成+发送成功才消灭；失败就把标记里的文字当普通文本补发出去，保证不丢信息。
     if (!cleaned) {
-      try { ctx.annihilate('dskit-tts: voice-only'); } catch { /* 已被消灭 */ }
-    } else {
-      try { ctx.rewrite(cleaned); } catch { /* 改写失败就按原文发 */ }
+      let anyOk = false;
+      for (const job of jobs) {
+        if (await speakOne(job)) anyOk = true;
+      }
+      if (anyOk) {
+        try { ctx.annihilate('dskit-tts: voice-only'); } catch { /* 已被消灭 */ }
+        return;
+      }
+      // 一条都没发出去 → 退化成文本，别让主人的话蒸发
+      const fallback = jobs.map((j) => j.text).join('\n');
+      try {
+        ctx.rewrite(fallback);
+      } catch { /* 改写失败就只能发原文（含标记） */ }
       await next();
+      return;
     }
 
-    // 3) 合成 + 发送（丢后台，别卡住正文）
+    // 3) 有正文：正文照常走，语音丢后台（不卡住消息）
+    try { ctx.rewrite(cleaned); } catch { /* 改写失败就按原文发 */ }
+    await next();
+
     const sendAll = async () => {
-      for (const job of jobs) {
-        try {
-          const r = await ttsText({ cfg, text: job.text, voice: job.voice || cfg.ttsVoice, format: cfg.ttsFormat });
-          const dir = join(String(ctx?.dataRoot || '.'), '.qqbot-extensions', '.state', 'dskit', 'tts');
-          mkdirSync(dir, { recursive: true });
-          const file = join(dir, `${randomUUID()}.${cfg.ttsFormat === 'pcm' ? 'pcm' : 'wav'}`);
-          writeFileSync(file, r.buffer);
-          const ok = await ctx.sendMedia({ path: file, kind: 'voice' });
-          if (ok === false) ctx.note?.(`[dskit-tts] 语音发送失败: ${file}`);
-        } catch (err) {
-          ctx.note?.(`[dskit-tts] 合成失败: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      for (const job of jobs) await speakOne(job);
     };
     if (typeof ctx.background === 'function') ctx.background(sendAll);
     else await sendAll();
-
-    if (!cleaned) return; // 已 annihilate，不要调 next()
     return;
   } catch {
     // 出站扩展**绝不能**吞掉正文：任何异常都放行
     return next();
   }
+}
+
+/**
+ * 把裸 PCM(16bit 小端单声道 24kHz) 包成一个标准 WAV 容器。
+ * @param {Buffer|Uint8Array} pcm 裸采样
+ * @returns {Buffer}
+ */
+function wrapWavPcm16(pcm) {
+  const data = Buffer.from(pcm);
+  const h = Buffer.alloc(44);
+  const byteRate = 24000 * 2; // 24000Hz * 2byte * 1ch
+  h.write('RIFF', 0, 'ascii');
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write('WAVE', 8, 'ascii');
+  h.write('fmt ', 12, 'ascii');
+  h.writeUInt32LE(16, 16);          // fmt chunk size
+  h.writeUInt16LE(1, 20);           // PCM
+  h.writeUInt16LE(1, 22);           // mono
+  h.writeUInt32LE(24000, 24);       // sample rate
+  h.writeUInt32LE(byteRate, 28);    // byte rate
+  h.writeUInt16LE(2, 32);           // block align
+  h.writeUInt16LE(16, 34);          // bits per sample
+  h.write('data', 36, 'ascii');
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
 }

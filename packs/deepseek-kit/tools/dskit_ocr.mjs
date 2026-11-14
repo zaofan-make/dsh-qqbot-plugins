@@ -67,7 +67,14 @@ export default {
       ];
       if (r.pageCount > PREVIEW_PAGES) lines.push('', `（只显示前 ${PREVIEW_PAGES} 页，共 ${r.pageCount} 页）`);
       if (saved) lines.push('', `全文已保存：${saved}（需要细节用 read_file 读）`);
-      if (all.length > 20000 && !saved) lines.push('', '⚠️ 文档较长且落盘失败，只返回了前面的内容');
+      // ★ 2026-11-14（CodeRabbit 审查）：警告要看「预览是不是真的漏了内容」，不是看全文长度。
+      //   反例：1 页 2000 字的文档，落盘失败 + 预览只给 1200 字 ⇒ 原来 because(20000 阈值) 不告警，
+      //   用户既拿不到剩下的 800 字、也拿不到文件路径，彻底丢信息。
+      const omittedPages = r.pageCount > PREVIEW_PAGES;
+      const omittedChars = r.pages.some((p) => p.text.length > PREVIEW_CHARS || p.truncated === true);
+      if (!saved && (omittedPages || omittedChars)) {
+        lines.push('', '⚠️ 预览被截断了，而全文落盘也失败了 —— 被省略的部分拿不到，请重试或换更小的文件');
+      }
       return { ok: true, msg: lines.join('\n') };
     } catch (err) {
       return { ok: false, msg: String(err instanceof Error ? err.message : err) };

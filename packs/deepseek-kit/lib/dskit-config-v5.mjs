@@ -87,7 +87,12 @@ export function loadConfig(dataRoot) {
   if (packDefaults) Object.assign(out, packDefaults);
   const root = String(dataRoot || '').trim();
   if (root) {
-    for (const f of CONFIG_FILES) {
+    // ★ 2026-11-14（CodeRabbit 审查抓到）：**优先级必须反过来应用**。
+    //   CONFIG_FILES 是按优先级“从高到低”排的，但 Object.assign 是“后写的赢”，
+    //   照原顺序遍历 = **低优先级覆盖高优先级** —— 结果：主配置 deepseek-kit.json 里填的新 Key
+    //   会被历史遗留的 dskit_tts.json / dskit-tts.json 里的旧 Key 顶掉，能力开关同理。
+    //   现在倒序遍历：先铺最低优先级，最后写最高优先级。
+    for (const f of [...CONFIG_FILES].reverse()) {
       const o = readJson(join(root, '.qqbot-extensions', '.state', 'ext-config', f));
       if (o) Object.assign(out, o);
     }
@@ -95,7 +100,9 @@ export function loadConfig(dataRoot) {
   out.apiKey = String(out.apiKey ?? '').trim();
   out.ownApiKey = out.apiKey;
   out.hostKey = hostDeepseekKey();
-  out.baseUrl = String(out.baseUrl ?? DEFAULTS.baseUrl).trim().replace(/\/+$/, '');
+  // ★ 2026-11-14（安全审查）：baseUrl 后面会被拼上 `Authorization: Bearer <Key>`，
+  //   所以只接受 https；http 仅放行本机回环（自建代理场景）。非法值直接回退默认，不抛错。
+  out.baseUrl = sanitizeBaseUrl(out.baseUrl);
   out.model = String(out.model ?? DEFAULTS.model).trim() || DEFAULTS.model;
   out.ttsVoice = String(out.ttsVoice ?? 'stella').trim() || 'stella';
   out.ttsFormat = String(out.ttsFormat ?? 'wav').trim() || 'wav';
@@ -104,6 +111,28 @@ export function loadConfig(dataRoot) {
     out[k] = out[k] !== false && String(out[k]) !== 'false';
   }
   return out;
+}
+
+/** 回环主机（允许 http 白名单） */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
+
+/**
+ * 校验 baseUrl：只允许 https（或本机回环上的 http）。
+ * 非法值 → 静默回退默认地址（不回显用户填的怪值，避免报错信息里带 Key 上下文）。
+ */
+function sanitizeBaseUrl(raw) {
+  const fallback = DEFAULTS.baseUrl;
+  const s = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!s) return fallback;
+  if (s === fallback) return s;
+  try {
+    const u = new URL(s);
+    if (u.protocol === 'https:') return s;
+    if (u.protocol === 'http:' && LOOPBACK_HOSTS.has(u.hostname)) return s;
+    return fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /** 有没有面板里填的 Key（不含宿主那份） */
@@ -235,5 +264,10 @@ export function outboundVoiceAllowed(ctx) {
   const cfg = loadConfig(dataRoot);
   const mgr = managerForDataRoot(dataRoot);
   const agent = agentOfTarget(mgr, ctx?.target);
+  // ★ 2026-11-14（CodeRabbit 审查）：**目标会话认不出来时不能借用宿主 Key**。
+  //   否则 agent 为 undefined 会落到 manager.config.provider（可能是 deepseek 默认路由），
+  //   等于给一个"provider 从未被识别"的会话发了宿主 Key —— 与本模块的铁律相悖。
+  //   认不出来只有一种放行理由：面板里自己填了 Key。
+  if (!agent && !hasOwnApiKey(cfg)) return false;
   return !!resolveApiKey(cfg, mgr, agent);
 }

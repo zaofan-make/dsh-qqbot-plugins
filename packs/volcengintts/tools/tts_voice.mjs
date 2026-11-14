@@ -10,7 +10,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  loadSettings, buildHeaders, resolveVoice, resolveResourceId, pickSpeaker,
+  loadSettings, buildHeaders, resolveVoice, resolveResourceId, altResourceId, pickSpeaker,
   ensureOutDir, describeAuth, DEFAULT_URL,
 } from '../lib/settings.mjs';
 
@@ -100,8 +100,17 @@ async function synthDirect(text, env, voiceOverride) {
           audio_params: { format: cfg.format || 'mp3', sample_rate: Number(cfg.sampleRate) || 24000 },
         },
       });
-      const resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker), body });
-      const raw = await resp.text();
+      const rid = resolveResourceId(cfg, speaker);
+      let resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker, rid), body });
+      let raw = await resp.text();
+      // ★ 2026-11-14（CodeRabbit 审查）：`test` 自检原来只打一次、不换资源。
+      //   复刻音色到底挂 icl-1.0 还是 icl-2.0 取决于它是哪版服务建的，
+      //   于是"音色其实可用、自检却报失败"——出站那边会自动换资源重试，这里对齐它。
+      const alt = altResourceId(rid, speaker);
+      if (!resp.ok && alt && (resp.status === 403 || /55000000|resource/i.test(raw))) {
+        resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker, alt), body });
+        raw = await resp.text();
+      }
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${raw.slice(0, 250)}`);
       const audio = parseAudio(raw);
       const outDir = ensureOutDir(cfg);

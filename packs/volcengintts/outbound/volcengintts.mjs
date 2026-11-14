@@ -312,21 +312,31 @@ async function synthesize(text, { rate = 0, loud = 0, voice = null, emotion = nu
         }
       } catch { /* 兜底失败：走原来的 emotion 重试逻辑 */ }
       // 音色不支持 emotion 时，去掉 emotion 再试一次同 URL
+      // ★ 2026-11-14（CodeRabbit 审查）：这一步原来写死用**原 resource**（buildHeaders 不传 rid），
+      //   于是"复刻音色挂错 icl 资源 + 不支持情绪"这两个问题叠在一起时，三条路全失败：
+      //     ① 原 resource + 带情绪 → 资源不匹配
+      //     ② 换 alt resource + 带情绪 → 情绪不支持
+      //     ③ 去情绪 + 原 resource → 又回到资源不匹配（就是这里）
+      //   现在去情绪这一轮把两个候选资源**都试**，不再押在原资源上。
       if (emotion) {
-        try {
-          const headers = buildHeaders(cfg, speaker);
-          const body = JSON.stringify(buildPayload(cfg, text, { speaker, rate, loud }));
-          const resp = await fetch(url, { method: 'POST', headers, body });
-          const raw = await resp.text();
-          if (resp.ok) {
-            const audio = parseAudio(raw);
-            const outDir = cfg.outDir || join(PLUGIN_DIR, 'out');
-            mkdirSync(outDir, { recursive: true });
-            const path = join(outDir, `qq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cfg.format || 'mp3'}`);
-            writeFileSync(path, audio);
-            return path;
-          }
-        } catch { /* 忽略，走下一个 URL */ }
+        const baseRid = resolveResourceId(cfg, speaker);
+        const candidates = [...new Set([baseRid, altResourceId(baseRid, speaker)].filter(Boolean))];
+        for (const rid of candidates) {
+          try {
+            const headers = buildHeaders(cfg, speaker, rid);
+            const body = JSON.stringify(buildPayload(cfg, text, { speaker, rate, loud }));
+            const resp = await fetch(url, { method: 'POST', headers, body });
+            const raw = await resp.text();
+            if (resp.ok) {
+              const audio = parseAudio(raw);
+              const outDir = cfg.outDir || join(PLUGIN_DIR, 'out');
+              mkdirSync(outDir, { recursive: true });
+              const path = join(outDir, `qq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cfg.format || 'mp3'}`);
+              writeFileSync(path, audio);
+              return path;
+            }
+          } catch { /* 这个候选失败，试下一个 */ }
+        }
       }
     }
   }

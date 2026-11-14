@@ -215,21 +215,28 @@ export function hasAuth(cfg) {
 export function buildHeaders(cfg, speaker, ridOverride) {
   const h = { 'Content-Type': 'application/json' };
   const mode = String(cfg.authMode || '').trim();
+  const hasLegacy = !!(cfg.appId && cfg.accessToken);
+  const hasApiKey = !!cfg.apiKey;
+  // ★ 2026-11-14（CodeRabbit 审查）：**显式选了模式就只认那一种凭据**。
+  //   原来 mode=apiKey 但 apiKey 为空时，会继续往下落到 `else if (appId&&accessToken)`
+  //   偷偷用旧版三件套；mode=legacy 而旧版凭据不全时又会退到 X-Api-Key。
+  //   用户明确选过的模式不该被静默换掉（火山那边报的是 401/403，根本看不出是选错了）。
   const useLegacy = mode === 'legacy'
     ? true
     : mode === 'apiKey'
       ? false
-      : !!(cfg.appId && cfg.accessToken);
-  if (useLegacy && cfg.appId && cfg.accessToken) {
-    h['X-Api-App-Id'] = String(cfg.appId);
-    h['X-Api-Access-Key'] = String(cfg.accessToken);
-  } else if (cfg.apiKey) {
-    h['X-Api-Key'] = String(cfg.apiKey);
-  } else if (cfg.appId && cfg.accessToken) {
+      : hasLegacy; // 未设置模式 → 按"填了什么"猜（向后兼容）
+  if (useLegacy) {
+    if (!hasLegacy) {
+      throw new Error('鉴权方式选了「旧版三件套」，但 AppId / AccessToken 没填全（或把鉴权方式切成 API Key）');
+    }
     h['X-Api-App-Id'] = String(cfg.appId);
     h['X-Api-Access-Key'] = String(cfg.accessToken);
   } else {
-    throw new Error('还没配置鉴权：请在「TTS 语音合成」设置页填 API Key（或把鉴权方式切成旧版并填 AppId+AccessToken）');
+    if (!hasApiKey) {
+      throw new Error('鉴权方式选了「API Key」，但 API Key 没填（或把鉴权方式切成旧版并填 AppId+AccessToken）');
+    }
+    h['X-Api-Key'] = String(cfg.apiKey);
   }
   const rid = ridOverride || resolveResourceId(cfg, speaker);
   if (rid) h['X-Api-Resource-Id'] = rid;

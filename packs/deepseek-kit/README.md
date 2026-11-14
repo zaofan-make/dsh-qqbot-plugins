@@ -77,6 +77,6 @@ deepseek-kit/
 
 ## 依赖
 
-- 插件 ≥ **1.12.30**（需要扩展工具的 `enabled` 条件可见钩子）
+- 插件 ≥ **1.12.31**（需要扩展工具的 `enabled` 条件可见钩子）
 - Node ≥ 18（内置 `fetch` / `FormData` / `Blob`）
 - 不需要额外 npm 包
