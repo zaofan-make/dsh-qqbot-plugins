@@ -26,7 +26,12 @@ export const DEFAULT_URL = 'https://openspeech.bytedance.com/api/v3/tts/unidirec
 
 /** 包内默认值：只有这里真正缺省才用得到，面板值永远优先 */
 export const DEFAULTS = {
-  authMode: 'apiKey',        // apiKey=新版控制台 | legacy=旧版 AppId+AccessToken
+  // ★ 2026-11-14（CodeRabbit 抓到回归）：**默认必须是空**，不能是 'apiKey'。
+  //   原因：loadSettings 会在 DEFAULTS 之上合并面板值，而"空串不覆盖默认"——
+  //   于是老用户（只填过 AppId/AccessToken、从没保存过 authMode）读出来就是 'apiKey'，
+  //   被我上一版 buildHeaders 的严格检查判成"你选了 API Key 却没填"，直接抛错。
+  //   也就是说：升级一次，旧版鉴权用户全部无法合成。空串 = "没选过"，由凭据推断。
+  authMode: '',
   apiKey: '',
   appId: '',
   accessToken: '',

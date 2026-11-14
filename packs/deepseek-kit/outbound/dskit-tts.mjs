@@ -116,12 +116,25 @@ export default async function onOutbound(ctx, next) {
     //    合成抛错或发送返回 false 时，这条回复**彻底消失**（用户既没文字也没语音）。
     //    现在改成：合成+发送成功才消灭；失败就把标记里的文字当普通文本补发出去，保证不丢信息。
     if (!cleaned) {
+      // ★ 2026-11-14（CodeRabbit 复审）：**按段记账**，别用 anyOk 一把梭。
+      //   两段标记时：第 1 段成功、第 2 段合成/发送失败 → anyOk 仍为 true → 整条 annihilate
+      //   ⇒ 第 2 段的内容**永远收不到**（既没语音也没文字）。现在：成功的发语音，
+      //   失败的把文字单独补发一条，一段都不丢。
+      const failed = [];
       let anyOk = false;
       for (const job of jobs) {
         if (await speakOne(job)) anyOk = true;
+        else failed.push(job.text);
       }
       if (anyOk) {
         try { ctx.annihilate('dskit-tts: voice-only'); } catch { /* 已被消灭 */ }
+        if (failed.length) {
+          const tail = failed.join('\n');
+          try {
+            // 出站 ctx 的 send(text) 是「先被动后主动」的独立通道，annihilate 之后仍可补发
+            await ctx.send?.(tail);
+          } catch { ctx.note?.('[dskit-tts] 失败片段补发文本也失败了'); }
+        }
         return;
       }
       // 一条都没发出去 → 退化成文本，别让主人的话蒸发

@@ -107,7 +107,12 @@ async function synthDirect(text, env, voiceOverride) {
       //   复刻音色到底挂 icl-1.0 还是 icl-2.0 取决于它是哪版服务建的，
       //   于是"音色其实可用、自检却报失败"——出站那边会自动换资源重试，这里对齐它。
       const alt = altResourceId(rid, speaker);
-      if (!resp.ok && alt && (resp.status === 403 || /55000000|resource/i.test(raw))) {
+      // ★ 2026-11-14（CodeRabbit）：只看 !resp.ok 不够 —— 火山有时回 **HTTP 200 但在 body 里带错误码**
+      //   （如 55000000 资源不匹配）。那种情况下 resp.ok 为 true，这里不重试，parseAudio 才抛错，
+      //   自检就报"失败"，而换资源本来是能出来的。所以判断从「HTTP 失败」扩展到「响应里带资源错误」。
+      const bodyLooksResourceErr = /55000000|resource[_ -]?mismatch/i.test(raw);
+      const firstFailed = !resp.ok || bodyLooksResourceErr;
+      if (firstFailed && alt && ((!resp.ok && resp.status === 403) || bodyLooksResourceErr)) {
         resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker, alt), body });
         raw = await resp.text();
       }
