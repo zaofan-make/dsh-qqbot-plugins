@@ -10,7 +10,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  loadSettings, buildHeaders, resolveVoice, resolveResourceId, pickSpeaker,
+  loadSettings, buildHeaders, resolveVoice, resolveResourceId, altResourceId, pickSpeaker,
   ensureOutDir, describeAuth, DEFAULT_URL,
 } from '../lib/settings.mjs';
 
@@ -100,8 +100,22 @@ async function synthDirect(text, env, voiceOverride) {
           audio_params: { format: cfg.format || 'mp3', sample_rate: Number(cfg.sampleRate) || 24000 },
         },
       });
-      const resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker), body });
-      const raw = await resp.text();
+      const rid = resolveResourceId(cfg, speaker);
+      let resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker, rid), body });
+      let raw = await resp.text();
+      // ★ 2026-11-14（CodeRabbit 审查）：`test` 自检原来只打一次、不换资源。
+      //   复刻音色到底挂 icl-1.0 还是 icl-2.0 取决于它是哪版服务建的，
+      //   于是"音色其实可用、自检却报失败"——出站那边会自动换资源重试，这里对齐它。
+      const alt = altResourceId(rid, speaker);
+      // ★ 2026-11-14（CodeRabbit）：只看 !resp.ok 不够 —— 火山有时回 **HTTP 200 但在 body 里带错误码**
+      //   （如 55000000 资源不匹配）。那种情况下 resp.ok 为 true，这里不重试，parseAudio 才抛错，
+      //   自检就报"失败"，而换资源本来是能出来的。所以判断从「HTTP 失败」扩展到「响应里带资源错误」。
+      const bodyLooksResourceErr = /55000000|resource[_ -]?mismatch/i.test(raw);
+      const firstFailed = !resp.ok || bodyLooksResourceErr;
+      if (firstFailed && alt && ((!resp.ok && resp.status === 403) || bodyLooksResourceErr)) {
+        resp = await fetch(url, { method: 'POST', headers: buildHeaders(cfg, speaker, alt), body });
+        raw = await resp.text();
+      }
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${raw.slice(0, 250)}`);
       const audio = parseAudio(raw);
       const outDir = ensureOutDir(cfg);
@@ -117,7 +131,15 @@ async function synthDirect(text, env, voiceOverride) {
 
 export default {
   name: 'tts_voice',
-  description: "火山方舟语音合成（豆包 TTS 2.0）。正文写 [语音合成|情绪词]文本[/语音合成] 会自动变成语音发 QQ。action: guide/emotions/test/status。",
+  description:
+    '火山方舟语音合成（豆包 TTS 2.0）。**在正文里写标记**，发出去时会自动变成语音消息（标记本身不外显）：'
+    + '① 简单：[语音合成]文本[/语音合成]；'
+    + '② 带情绪：[语音合成|撒娇]文本[/语音合成]；'
+    + '③ 细调（推荐）：[语音合成 情绪=撒娇 强度=4 语速=0.8 音量=0.95]文本[/语音合成] —— '
+    + '参数空格/逗号分隔，语速与音量支持 0.8 这种倍率或 -20 这种百分比，音色=音色ID 可单条换音色。'
+    + '⚠️ 复刻音色不支持 [气声耳语]/[轻吸气] 这类标签（会被当正文念出来），也不支持'
+    + '"用温柔点的语气说"这类语音指令；想要软/慢/贴耳，用 语速+音量 + 正文里的「……」制造气口。'
+    + 'action: guide=完整用法 / emotions=情绪对照表 / test=合成一条测试语音 / status=看配置。',
   inputSchema: {
     action: {
       type: 'string',

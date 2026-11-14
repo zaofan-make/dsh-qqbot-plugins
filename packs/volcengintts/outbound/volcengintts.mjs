@@ -29,7 +29,8 @@
 import { writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { loadSettings, ensureOutDir, pickSpeaker, PACK_DIR } from '../lib/settings.mjs';
+import { loadSettings, ensureOutDir, pickSpeaker, PACK_DIR, resolveResourceId, altResourceId } from '../lib/settings.mjs';
+import { buildHeaders } from '../lib/settings.mjs';
 import { VOICES_PICKER } from '../lib/voices.mjs';
 
 export const name = 'tts-voice';
@@ -203,34 +204,7 @@ function resolveVoice(cfg, voice) {
   return v;
 }
 
-/** Resource-Id：默认 seed-tts-2.0；只有 S_ 前缀（复刻 1.0）才走 seed-icl-1.0
- *  ★2026-10-19 实测修正：ICL_ 前缀音色用 seed-icl-2.0 会 403（未授权），
- *    但挂 seed-tts-2.0 直接 200 —— 所以不要按 ICL_ 前缀自动改成 icl 资源。 */
-function resolveResourceId(cfg, speaker) {
-  const sp = String(speaker || cfg.defaultSpeaker || '');
-  // ★1.0 音色（mars / moon 后缀）必须走 seed-tts-1.0，否则 resource mismatched
-  if (/_(mars|moon)_bigtts$/i.test(sp)) return 'seed-tts-1.0';
-  if (cfg.resourceId && cfg.resourceId !== 'auto') return cfg.resourceId;
-  if (/^S_/i.test(sp)) return 'seed-icl-1.0';
-  return 'seed-tts-2.0';
-}
-
-/** 按配置拼鉴权头（旧版三件套优先，其次新版 API Key） */
-function buildHeaders(cfg, speaker) {
-  const h = { 'Content-Type': 'application/json' };
-  if (cfg.appId && cfg.accessToken) {
-    h['X-Api-App-Id'] = String(cfg.appId);
-    h['X-Api-Access-Key'] = String(cfg.accessToken);
-  } else if (cfg.apiKey) {
-    h['X-Api-Key'] = String(cfg.apiKey);
-  } else {
-    throw new Error('tts-config.json 既没有 appId+accessToken，也没有 apiKey');
-  }
-  const rid = resolveResourceId(cfg, speaker);
-  if (rid) h['X-Api-Resource-Id'] = rid;
-  h['X-Api-Request-Id'] = randomUUID();
-  return h;
-}
+// buildHeaders / resolveResourceId 统一由 lib/settings.mjs 提供（2026-11-11：避免两份逻辑漂移）
 
 /** 火山接口对 audio_params 里的数值字段做严格类型检查：传字符串直接 55000000
  *  （json: cannot unmarshal string into Go struct field AudioParams... of type int/float）。
@@ -315,22 +289,54 @@ async function synthesize(text, { rate = 0, loud = 0, voice = null, emotion = nu
       return path;
     } catch (e) {
       lastErr = e;
-      // 音色不支持 emotion 时，去掉 emotion 再试一次同 URL
-      if (emotion) {
-        try {
-          const headers = buildHeaders(cfg, speaker);
-          const body = JSON.stringify(buildPayload(cfg, text, { speaker, rate, loud }));
+      // ★ 2026-11-11：资源不匹配兜底 —— 复刻音色到底属于 icl-1.0 还是 icl-2.0，
+      //   取决于它是在哪一版复刻服务里建的（ID 前缀不可靠，实测 S_ 前缀挂 icl-1.0 反而 403）。
+      //   这里遇到 403 / resource mismatched，就换另一个 icl 资源再试一次。
+      try {
+        const msg = e instanceof Error ? e.message : String(e);
+        const curRid = resolveResourceId(cfg, speaker);
+        const alt = altResourceId(curRid, speaker);
+        if (alt && /403|55000000|resource/i.test(msg)) {
+          const headers = buildHeaders(cfg, speaker, alt);
+          const body = JSON.stringify(buildPayload(cfg, text, { speaker, rate, loud, emotion, emotionScale }));
           const resp = await fetch(url, { method: 'POST', headers, body });
           const raw = await resp.text();
           if (resp.ok) {
             const audio = parseAudio(raw);
-            const outDir = cfg.outDir || join(PLUGIN_DIR, 'out');
-            mkdirSync(outDir, { recursive: true });
-            const path = join(outDir, `qq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cfg.format || 'mp3'}`);
-            writeFileSync(path, audio);
-            return path;
+            const outDir2 = cfg.outDir || join(PLUGIN_DIR, 'out');
+            mkdirSync(outDir2, { recursive: true });
+            const p2 = join(outDir2, `qq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cfg.format || 'mp3'}`);
+            writeFileSync(p2, audio);
+            return p2;
           }
-        } catch { /* 忽略，走下一个 URL */ }
+        }
+      } catch { /* 兜底失败：走原来的 emotion 重试逻辑 */ }
+      // 音色不支持 emotion 时，去掉 emotion 再试一次同 URL
+      // ★ 2026-11-14（CodeRabbit 审查）：这一步原来写死用**原 resource**（buildHeaders 不传 rid），
+      //   于是"复刻音色挂错 icl 资源 + 不支持情绪"这两个问题叠在一起时，三条路全失败：
+      //     ① 原 resource + 带情绪 → 资源不匹配
+      //     ② 换 alt resource + 带情绪 → 情绪不支持
+      //     ③ 去情绪 + 原 resource → 又回到资源不匹配（就是这里）
+      //   现在去情绪这一轮把两个候选资源**都试**，不再押在原资源上。
+      if (emotion) {
+        const baseRid = resolveResourceId(cfg, speaker);
+        const candidates = [...new Set([baseRid, altResourceId(baseRid, speaker)].filter(Boolean))];
+        for (const rid of candidates) {
+          try {
+            const headers = buildHeaders(cfg, speaker, rid);
+            const body = JSON.stringify(buildPayload(cfg, text, { speaker, rate, loud }));
+            const resp = await fetch(url, { method: 'POST', headers, body });
+            const raw = await resp.text();
+            if (resp.ok) {
+              const audio = parseAudio(raw);
+              const outDir = cfg.outDir || join(PLUGIN_DIR, 'out');
+              mkdirSync(outDir, { recursive: true });
+              const path = join(outDir, `qq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cfg.format || 'mp3'}`);
+              writeFileSync(path, audio);
+              return path;
+            }
+          } catch { /* 这个候选失败，试下一个 */ }
+        }
       }
     }
   }
