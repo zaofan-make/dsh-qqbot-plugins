@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-11-07",
+  "updated": "2026-11-14",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
@@ -27,19 +27,59 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/扒b站.mjs",
         "cover.png",
         "lib/bili_current.mjs",
         "lib/bili_queue.mjs",
         "lib/bili_worker.mjs",
         "qqbot-pack.json",
+        "README.md",
         "tools/bili_fetch.mjs",
         "tools/bili_grab.mjs",
         "tools/bili_share.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/bili-share/cover.png"
+    },
+    {
+      "id": "deepseek-kit",
+      "name": "DeepSeek 全家桶 · 联网搜索 / OCR / ASR / TTS",
+      "author": "做早饭",
+      "version": "1.0.0",
+      "minPluginVersion": "1.12.31",
+      "description": "把 DeepSeek 官方「全家桶应用 API」接成一套工具：dskit_search（服务端联网搜索，支持深度思考搜索多步检索 + 按图搜索 + 带引用）、dskit_readurl（读你给的链接）、dskit_ocr（PDF/Office/图片转文字，带版面坐标）、dskit_asr（语音转文字）、dskit_tts（语音合成说明与试听）+ 出站扩展（正文写 [语音合成] 标记就变成真语音）。设置页填一个 API Key 即可；没填 Key 或当前模型不是 DeepSeek 官方时，这些工具对 AI 完全不可见。",
+      "repo": "zaofan-make/dsh-qqbot-plugins",
+      "path": "packs/deepseek-kit",
+      "tags": [
+        "DeepSeek",
+        "联网搜索",
+        "深度思考搜索",
+        "图片搜索",
+        "OCR",
+        "ASR",
+        "TTS",
+        "语音合成",
+        "扩展包"
+      ],
+      "kinds": [
+        "outbound",
+        "tools"
+      ],
+      "files": [
+        "cover.png",
+        "lib/dskit-api.mjs",
+        "lib/dskit-config.mjs",
+        "outbound/dskit-tts.mjs",
+        "qqbot-pack.json",
+        "README.md",
+        "tools/dskit_asr.mjs",
+        "tools/dskit_ocr.mjs",
+        "tools/dskit_readurl.mjs",
+        "tools/dskit_search.mjs",
+        "tools/dskit_tts.mjs"
+      ],
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot",
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/deepseek-kit/cover.png"
     },
     {
       "id": "demo-author",
@@ -118,7 +158,6 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/companion-id.mjs",
         "commands/companion.mjs",
         "cover.png",
@@ -128,6 +167,7 @@
         "lib/transport.mjs",
         "preview.png",
         "qqbot-pack.json",
+        "README.md",
         "tools/companion_manage.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
@@ -154,11 +194,11 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/头像.mjs",
         "cover.png",
         "lib/avatar.mjs",
         "qqbot-pack.json",
+        "README.md",
         "tools/qq_avatar.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot",
@@ -211,7 +251,6 @@
         "tools"
       ],
       "files": [
-        "README.md",
         "commands/tts.mjs",
         "cover.png",
         "docs/01-open-tts-model.png",
@@ -220,6 +259,7 @@
         "lib/voices.mjs",
         "outbound/volcengintts.mjs",
         "qqbot-pack.json",
+        "README.md",
         "tools/tts_voice.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",

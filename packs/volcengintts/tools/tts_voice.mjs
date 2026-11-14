@@ -117,7 +117,15 @@ async function synthDirect(text, env, voiceOverride) {
 
 export default {
   name: 'tts_voice',
-  description: "火山方舟语音合成（豆包 TTS 2.0）。正文写 [语音合成|情绪词]文本[/语音合成] 会自动变成语音发 QQ。action: guide/emotions/test/status。",
+  description:
+    '火山方舟语音合成（豆包 TTS 2.0）。**在正文里写标记**，发出去时会自动变成语音消息（标记本身不外显）：'
+    + '① 简单：[语音合成]文本[/语音合成]；'
+    + '② 带情绪：[语音合成|撒娇]文本[/语音合成]；'
+    + '③ 细调（推荐）：[语音合成 情绪=撒娇 强度=4 语速=0.8 音量=0.95]文本[/语音合成] —— '
+    + '参数空格/逗号分隔，语速与音量支持 0.8 这种倍率或 -20 这种百分比，音色=音色ID 可单条换音色。'
+    + '⚠️ 复刻音色不支持 [气声耳语]/[轻吸气] 这类标签（会被当正文念出来），也不支持'
+    + '"用温柔点的语气说"这类语音指令；想要软/慢/贴耳，用 语速+音量 + 正文里的「……」制造气口。'
+    + 'action: guide=完整用法 / emotions=情绪对照表 / test=合成一条测试语音 / status=看配置。',
   inputSchema: {
     action: {
       type: 'string',

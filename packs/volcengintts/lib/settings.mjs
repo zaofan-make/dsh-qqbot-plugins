@@ -153,36 +153,85 @@ export function pickSpeaker(cfg, override) {
 }
 
 /**
- * Resource-Id 判定（2026-10-19 实测结论，别乱改）：
- *   · `_mars_/_moon_` 结尾的 1.0 音色 必须 seed-tts-1.0，否则 resource mismatched
- *   · `ICL_` 前缀（复刻音色）挂 seed-icl-2.0 会 403（未授权），挂 seed-tts-2.0 反而 200
- *   · `S_` 前缀（复刻 1.0）才走 seed-icl-1.0
- *   面板里手填 resourceId 时一切听面板的。
+ * Resource-Id 判定（2026-11-11 修订 —— 旧规则按前缀猜，已实测被推翻）
+ *
+ * 旧规则（错）：
+ *   · `S_` 前缀 ⇒ seed-icl-1.0
+ *   · `ICL_` 前缀 ⇒ seed-icl-2.0
+ *
+ * 实测（2026-11-11，同一把 API Key）：
+ *   · 音色 `S_3RlxkTBi2`（在**复刻 2.0** 建的）挂 `seed-icl-1.0` ⇒ **403**
+ *     挂 `seed-icl-2.0` ⇒ **200**
+ *   · 自拟代号 `whaleclone787cf6b` 挂 `seed-icl-2.0` ⇒ 200，挂 `seed-tts-2.0` ⇒ 55000000
+ *
+ * 结论：**ID 前缀不可靠，能用的版本取决于该音色是在哪一版复刻服务里建的**。
+ * 所以 auto 改成：
+ *   ① `_mars_/_moon_` 结尾的老 1.0 大模型音色 → seed-tts-1.0
+ *   ② 看起来像「复刻音色」（`S_` / `ICL_` / 不含 `_bigtts` 的自拟代号）→ **优先 seed-icl-2.0**
+ *   ③ 其余（`*_bigtts` 的 2.0 官方音色）→ seed-tts-2.0
+ *
+ * 另外 `synthesize` 里挂了兜底：遇到 403 / resource mismatched 时，
+ * 会自动换用另一个 icl 资源再试一次（见 outbound/volcengintts.mjs）。
+ * 面板里手填 resourceId 时，一切听面板的（不猜）。
  */
+export function isCloneLike(speaker) {
+  const sp = String(speaker || '');
+  if (!sp) return false;
+  if (/^S_/i.test(sp) || /^ICL_/i.test(sp)) return true;   // 复刻槽位 / ICL 角色音色
+  return !/_bigtts$/i.test(sp) && !/^zh_|^en_|^ja_|^multi_/i.test(sp);
+}
+
 export function resolveResourceId(cfg, speaker) {
   const sp = String(speaker || cfg.defaultSpeaker || '');
   if (/_(mars|moon)_bigtts$/i.test(sp)) return 'seed-tts-1.0';
   if (cfg.resourceId && cfg.resourceId !== 'auto') return cfg.resourceId;
-  if (/^S_/i.test(sp)) return 'seed-icl-1.0';
+  if (isCloneLike(sp)) return 'seed-icl-2.0';
   return 'seed-tts-2.0';
+}
+
+/** 复刻音色的备选资源（403/不匹配时兜底换一个再试） */
+export function altResourceId(rid, speaker) {
+  if (!isCloneLike(speaker)) return '';
+  if (rid === 'seed-icl-2.0') return 'seed-icl-1.0';
+  if (rid === 'seed-icl-1.0') return 'seed-icl-2.0';
+  return '';
 }
 
 export function hasAuth(cfg) {
   return !!((cfg.appId && cfg.accessToken) || cfg.apiKey);
 }
 
-/** 拼鉴权头：旧版三件套优先，其次新版 API Key */
-export function buildHeaders(cfg, speaker) {
+/**
+ * 拼鉴权头。**先看面板的 `authMode`，再看填了什么**（2026-11-11 修）。
+ *
+ * ⚠️ 原实现是「有 appId+accessToken 就用旧版三件套」——
+ *    用户明明选了 apiKey，只因为控制台页面上还留着 old 的 AppId/Token，
+ *    就会**静默走旧版鉴权**：火山回 401/403（load grant: requested grant not found in SaaS storage），
+ *    报错还看不出是鉴权方式选错了。现在按 authMode 走：
+ *      · 'apiKey' → 只发 X-Api-Key（appId/token 填了也忽略）
+ *      · 'legacy' → 只发旧版三件套
+ *      · 未设置 → 按"填了什么"猜（旧行为，向后兼容）
+ */
+export function buildHeaders(cfg, speaker, ridOverride) {
   const h = { 'Content-Type': 'application/json' };
-  if (cfg.appId && cfg.accessToken) {
+  const mode = String(cfg.authMode || '').trim();
+  const useLegacy = mode === 'legacy'
+    ? true
+    : mode === 'apiKey'
+      ? false
+      : !!(cfg.appId && cfg.accessToken);
+  if (useLegacy && cfg.appId && cfg.accessToken) {
     h['X-Api-App-Id'] = String(cfg.appId);
     h['X-Api-Access-Key'] = String(cfg.accessToken);
   } else if (cfg.apiKey) {
     h['X-Api-Key'] = String(cfg.apiKey);
+  } else if (cfg.appId && cfg.accessToken) {
+    h['X-Api-App-Id'] = String(cfg.appId);
+    h['X-Api-Access-Key'] = String(cfg.accessToken);
   } else {
-    throw new Error('还没配置鉴权：请在「TTS 语音合成」设置页填 API Key（或旧版 AppId + AccessToken）');
+    throw new Error('还没配置鉴权：请在「TTS 语音合成」设置页填 API Key（或把鉴权方式切成旧版并填 AppId+AccessToken）');
   }
-  const rid = resolveResourceId(cfg, speaker);
+  const rid = ridOverride || resolveResourceId(cfg, speaker);
   if (rid) h['X-Api-Resource-Id'] = rid;
   h['X-Api-Request-Id'] = randomUUID();
   return h;
@@ -196,7 +245,9 @@ export function ensureOutDir(cfg) {
 
 /** 面板里该展示的鉴权状态（不泄露密钥本体） */
 export function describeAuth(cfg) {
-  const mode = cfg.appId && cfg.accessToken ? 'legacy' : (cfg.apiKey ? 'apiKey' : 'none');
+  // 与 buildHeaders 同口径：authMode 优先（否则面板显示与实际用的鉴权会对不上，排查时误导）
+  const wantLegacy = String(cfg.authMode || '').trim() === 'legacy';
+  const mode = wantLegacy && cfg.appId && cfg.accessToken ? 'legacy' : (cfg.apiKey ? 'apiKey' : (cfg.appId && cfg.accessToken ? 'legacy' : 'none'));
   const mask = (s) => {
     const t = String(s || '');
     if (!t) return '';
