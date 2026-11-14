@@ -27,13 +27,13 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/扒b站.mjs",
         "cover.png",
         "lib/bili_current.mjs",
         "lib/bili_queue.mjs",
         "lib/bili_worker.mjs",
         "qqbot-pack.json",
-        "README.md",
         "tools/bili_fetch.mjs",
         "tools/bili_grab.mjs",
         "tools/bili_share.mjs"
@@ -66,12 +66,12 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "cover.png",
         "lib/dskit-api.mjs",
         "lib/dskit-config-v5.mjs",
         "outbound/dskit-tts.mjs",
         "qqbot-pack.json",
-        "README.md",
         "tools/dskit_asr.mjs",
         "tools/dskit_ocr.mjs",
         "tools/dskit_readurl.mjs",
@@ -158,6 +158,7 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/companion-id.mjs",
         "commands/companion.mjs",
         "cover.png",
@@ -167,7 +168,6 @@
         "lib/transport.mjs",
         "preview.png",
         "qqbot-pack.json",
-        "README.md",
         "tools/companion_manage.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
@@ -194,11 +194,11 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/头像.mjs",
         "cover.png",
         "lib/avatar.mjs",
         "qqbot-pack.json",
-        "README.md",
         "tools/qq_avatar.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot",
@@ -251,6 +251,7 @@
         "tools"
       ],
       "files": [
+        "README.md",
         "commands/tts.mjs",
         "cover.png",
         "docs/01-open-tts-model.png",
@@ -259,7 +260,6 @@
         "lib/voices.mjs",
         "outbound/volcengintts.mjs",
         "qqbot-pack.json",
-        "README.md",
         "tools/tts_voice.mjs"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
