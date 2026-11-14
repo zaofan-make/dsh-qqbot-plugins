@@ -8,7 +8,7 @@
  *
  * 契约：export default { name, description, inputSchema, enabled, run }
  */
-import { cfgForCall, toolVisible } from '../lib/dskit-config.mjs';
+import { cfgForCall, toolVisible } from '../lib/dskit-config-v5.mjs';
 import { webSearch } from '../lib/dskit-api.mjs';
 
 export default {

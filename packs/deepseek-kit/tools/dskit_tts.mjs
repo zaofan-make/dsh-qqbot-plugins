@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { cfgForCall, toolVisible } from '../lib/dskit-config.mjs';
+import { cfgForCall, toolVisible } from '../lib/dskit-config-v5.mjs';
 import { ttsText } from '../lib/dskit-api.mjs';
 
 const GUIDE = [

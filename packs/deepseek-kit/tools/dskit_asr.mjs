@@ -6,7 +6,7 @@
  *   · 手里的音频是**本地文件**（录音、视频抽出的音轨）
  * 就需要自己调一次 ASR。官方限制：16bit PCM WAV 或 Ogg Opus，≤8MiB，≤120 秒。
  */
-import { cfgForCall, toolVisible } from '../lib/dskit-config.mjs';
+import { cfgForCall, toolVisible } from '../lib/dskit-config-v5.mjs';
 import { asrFile } from '../lib/dskit-api.mjs';
 
 export default {

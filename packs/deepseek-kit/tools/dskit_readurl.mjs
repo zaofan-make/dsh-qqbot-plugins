@@ -7,7 +7,7 @@
  *
  * 与 dskit_search 的区别：search 是"模型自己去搜"，readurl 是"你给链接，它去读"。
  */
-import { cfgForCall, toolVisible } from '../lib/dskit-config.mjs';
+import { cfgForCall, toolVisible } from '../lib/dskit-config-v5.mjs';
 import { readUrls } from '../lib/dskit-api.mjs';
 
 export default {

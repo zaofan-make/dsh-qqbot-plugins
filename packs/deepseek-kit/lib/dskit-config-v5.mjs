@@ -1,5 +1,5 @@
 /**
- * dskit-config.mjs —— DeepSeek 全家桶扩展包的「唯一配置读取入口」
+ * dskit-config-v5.mjs —— DeepSeek 全家桶扩展包的「唯一配置读取入口」
  *
  * 三处消费：工具（tools/*）、出站（outbound/*）、面板（qqbotSettingsPage）。
  * 扩展配置落盘在 `{dataRoot}/.qqbot-extensions/.state/ext-config/<文件>.json`。
@@ -35,8 +35,14 @@ export const DEFAULTS = {
   ocrPurpose: 'text_recognition',
 };
 
-/** 面板可能把配置存成的几种文件名（按优先级） */
-const CONFIG_FILES = ['deepseek-kit.json', 'dskit.json', 'dskit_search.json', 'dskit_ocr.json', 'dskit_tts.json'];
+/**
+ * 面板可能把配置存成的几种文件名（按优先级，后面的覆盖前面的）——
+ * **两种命名都要认**：插件按「扩展文件基名」生成 id，出站扩展是 `dskit-tts.mjs`
+ * ⇒ 存成 `dskit-tts.json`（连字符）；工具是 `dskit_tts.mjs` ⇒ `dskit_tts.json`（下划线）。
+ * 2026-11-14 实测事故：只列了下划线那种，主人明明填了 Key，`ownApiKey` 仍读成空
+ * ⇒ opencode provider 的会话判定 false ⇒ 五个工具全隐藏（看着像"填了没用/要重启"）。
+ */
+const CONFIG_FILES = ['deepseek-kit.json', 'dskit.json', 'dskit_search.json', 'dskit_ocr.json', 'dskit_tts.json', 'dskit-tts.json'];
 
 function readJson(p) {
   try {

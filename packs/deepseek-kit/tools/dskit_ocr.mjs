@@ -11,7 +11,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cfgForCall, toolVisible } from '../lib/dskit-config.mjs';
+import { cfgForCall, toolVisible } from '../lib/dskit-config-v5.mjs';
 import { ocrFile } from '../lib/dskit-api.mjs';
 
 const PREVIEW_PAGES = 5;

@@ -2,7 +2,7 @@
   "name": "DeepSeek 全家桶 · 联网搜索 / OCR / ASR / TTS",
   "id": "deepseek-kit",
   "author": "做早饭",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minPluginVersion": "1.12.31",
   "description": "把 DeepSeek 官方「全家桶应用 API」接成一套工具：dskit_search（服务端联网搜索，支持深度思考搜索多步检索 + 按图搜索 + 带引用）、dskit_readurl（读你给的链接）、dskit_ocr（PDF/Office/图片转文字，带版面坐标）、dskit_asr（语音转文字）、dskit_tts（语音合成说明与试听）+ 出站扩展（正文写 [语音合成] 标记就变成真语音）。设置页填一个 API Key 即可；没填 Key 或当前模型不是 DeepSeek 官方时，这些工具对 AI 完全不可见。",
   "tags": [

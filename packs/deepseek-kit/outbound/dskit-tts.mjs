@@ -17,7 +17,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, resolveApiKey, managerForDataRoot, agentOfTarget } from '../lib/dskit-config.mjs';
+import { loadConfig, resolveApiKey, managerForDataRoot, agentOfTarget } from '../lib/dskit-config-v5.mjs';
 import { ttsText } from '../lib/dskit-api.mjs';
 
 export const name = 'dskit-tts';
