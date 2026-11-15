@@ -161,12 +161,11 @@
         "outbound"
       ],
       "files": [
-        "cover.png",
         "outbound/whale-emotion-buttons.mjs",
         "qqbot-pack.json"
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
-      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/poke/cover.png"
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/poke/cover.jpg"
     },
     {
       "id": "proactive-companion",
