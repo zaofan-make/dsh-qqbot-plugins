@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-11-14",
+  "updated": "2026-11-15",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
@@ -137,6 +137,36 @@
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins/tree/main/packs/pick-one",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/pick-one/cover.png"
+    },
+    {
+      "id": "poke",
+      "name": "戳一戳？",
+      "author": "做早饭",
+      "version": "1.0.0",
+      "minPluginVersion": "1.13.5",
+      "description": "她每次说话都自动在底部挂一排「戳一戳」按钮：按正文情绪匹配（摸摸头/戳戳脸/递白饭…），按钮是指令型，点了只把你和动作名填进输入框（如 @bot 摸摸头），你自己决定发不发——不触发回调、不需要后端。情绪判别用结构规则：先剥语气词，再看否定词奇偶作用域、程度副词分级、转折后加权，避免把「哼」「啦」「喵」这类口头禅误判成生气。已经带按钮/卡片的消息不会重复挂。",
+      "repo": "zaofan-make/dsh-qqbot-plugins",
+      "path": "packs/poke",
+      "tags": [
+        "出站",
+        "outbound",
+        "按钮",
+        "keyboard",
+        "表情",
+        "情绪",
+        "卡片",
+        "戳一戳"
+      ],
+      "kinds": [
+        "outbound"
+      ],
+      "files": [
+        "cover.png",
+        "outbound/whale-emotion-buttons.mjs",
+        "qqbot-pack.json"
+      ],
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot-plugins",
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/poke/cover.png"
     },
     {
       "id": "proactive-companion",
