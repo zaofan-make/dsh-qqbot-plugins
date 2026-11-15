@@ -110,7 +110,13 @@ function scoreClause(clause) {
           if (pre.endsWith(d) || pre.slice(-DEG_WINDOW).includes(d)) { weight = mul; break; }
         }
         // 否定词奇偶（作用域窗口内计数）
-        const win = pre.slice(-NEG_WINDOW);
+        //
+        // ★ 2026-11-15（CodeRabbit 抓到，实测确认）：「非常开心」会被判错。
+        //   因为 **`非` 在否定词表里**，而 `非常` 是程度副词 ——
+        //   它把「非」数成一次否定，把 happy 的 1.8 翻转成 -1.8，情绪整个判反。
+        //   所以在数否定词之前，先把**程度副词整个从窗口里剔掉**（"非常"→""，"特别"→""…）。
+        let win = pre.slice(-NEG_WINDOW);
+        for (const d of Object.keys(DEGREES)) win = win.split(d).join('');
         let neg = 0;
         for (const n of NEGATORS) {
           let p = win.indexOf(n);
