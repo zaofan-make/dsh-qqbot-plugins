@@ -211,6 +211,22 @@ function keyboardOf(instructions) {
   };
 }
 
+/**
+ * 正文里带**协议标记**时一律不接管。
+ *
+ * ★ 2026-11-15 主人实测抓到：她发图时正文是 `[MEDIA:image|D:\\...png]`，
+ *   我接管后拿 `sendMarkdownWithKeyboard` 发的却是**原始文本**
+ *   —— 而 `[MEDIA:]` 是 transport 的 `parseOutbound` 解析成"媒体段"的，
+ *   走我这条路就没人解析它，于是整串路径**原样显示在群里**（图也没了）。
+ *   `[RECALL]` / `[rf:xxx]` 同理。
+ *   这些标记代表"这条消息要分段发（文本+图+撤回）"，我一个按钮不值得破坏它 ⇒ 直接放行。
+ */
+const DIRECTIVE_RE = /\[(?:MEDIA|RECALL|rf)\b/i;
+
+function hasDirectives(text) {
+  return DIRECTIVE_RE.test(String(text ?? ''));
+}
+
 /** 正文里已经带按钮/键盘标记就不重复挂 */
 function alreadyHasKeyboard(ctx) {
   if (ctx.kind === 'card' || ctx.kind === 'markdown') return true;
@@ -228,6 +244,8 @@ export default async function onOutbound(ctx, next) {
     const text = String(ctx?.text ?? '');
     if (!text.trim()) return safeNext();
     if (alreadyHasKeyboard(ctx)) return safeNext();
+    // 带 MEDIA/RECALL/rf 这类协议标记 → 放行（接管会把标记当文字发出去）
+    if (hasDirectives(text)) return safeNext();
 
     const def = MOODS[pickMood(text)] ?? MOODS.curious;
 
