@@ -139,8 +139,13 @@ function pickMood(text) {
   const raw = String(text ?? '');
   if (!raw.trim()) return 'curious';
 
-  // ① 剥语气词：它们是"作用域终止符"，不是情感信号
-  const clean = raw.replace(FILLER_RE, '');
+  // ① 剥语气词：它们是"作用域终止符"，不是情感信号。
+  //   ★ 2026-11-15（CodeRabbit 第二轮抓到，实测确认）：**不能直接删**。
+  //     `不啦我很开心` 删完变 `不我很开心` ⇒ 那个"不"会跨越语气词去否定"开心"，
+  //     正好违背"语气词是作用域终止符"这条原则。
+  //     改成**替换成子句分隔符**：`不啦我很开心` → `不，我很开心`，
+  //     前半截"不"单独成句（没有情感词，无效），后半截正常判 happy。
+  const clean = raw.replace(FILLER_RE, '，');
 
   // ② 切子句（标点 + 转折词），转折词单独标记
   const pieces = [];
@@ -161,8 +166,13 @@ function pickMood(text) {
     let hitTurn = false;
     for (const tw of TURNS) {
       const i = rest.indexOf(tw);
-      if (i > 0) {
-        clauses.push({ text: rest.slice(0, i), turn: false });
+      // ★ 2026-11-15（CodeRabbit 第二轮）：原来是 `i > 0` —— 于是
+      //   `生气，但是开心` 切完子句后 rest 就是"但是开心"，indexOf 得 0，
+      //   这个判断直接跳过、转折权重没加上，两种情绪同分、由先登记的赢（错的）。
+      //   改成 `i >= 0`，并且前面那截为空时不 push（避免塞空子句）。
+      if (i >= 0) {
+        const head = rest.slice(0, i).trim();
+        if (head) clauses.push({ text: head, turn: false });
         rest = rest.slice(i + tw.length);
         hitTurn = true;
         break;
