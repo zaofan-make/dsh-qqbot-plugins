@@ -1,0 +1,15 @@
+{
+  "name": "模型读图 · model_see",
+  "author": "做早饭",
+  "version": "1.0.1",
+  "description": "用当前会话正在用的那个模型看图：本地路径或网址 + 一句要求，图在工具里发给模型，只把文字结果带回上下文。历史里不留 image block —— 不会每轮重发图片、不会重复烧视觉 token，也不会因为某张图触发上游审核而把整个会话锁死。走标准 OpenAI 兼容 image_url，换服务商只改 baseURL。",
+  "homepage": "https://github.com/zaofan-make/dsh-qqbot",
+  "tags": [
+    "读图",
+    "多模态",
+    "视觉",
+    "OpenAI兼容",
+    "防毒会话"
+  ],
+  "minPluginVersion": "1.12.31"
+}
