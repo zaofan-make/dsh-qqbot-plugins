@@ -29,6 +29,28 @@ import { randomUUID } from 'node:crypto';
 
 const PACK_ID = 'model-vision';
 
+// ⚠️ **必须放在文件前 4KB 内**：面板扫描设置页时只读每个扩展文件的**前 4096 字节**
+//    （settings-host.js: `readFileSync(full,'utf8').slice(0, 4096)` 再匹配 `qqbotSettingsPage`），
+//    放在文件后半段 ⇒ 面板认不出、没有 ⚙ 设置表单（2026-11-21 主人实测踩到）。
+export const qqbotSettingsPage = {
+  title: '模型读图 · 设置',
+  desc: '两种取值优先级：当前会话优先（默认，用当前会话的 provider/model + 宿主凭据）/ 面板设置优先（先用手填的 Key、Base URL、模型）',
+  schema: [
+    {
+      key: 'sourceMode',
+      type: 'select',
+      label: '取值优先级',
+      default: '当前会话优先',
+      options: ['当前会话优先', '面板设置优先'],
+      hint: '当前会话优先：模型与地址跟当前会话走，Key 读宿主凭据；面板设置优先：先用手填的三项，缺的才回落',
+    },
+    { key: 'apiKey', type: 'string', secret: true, label: 'API Key', default: '', placeholder: '留空=按 provider 读宿主凭据' },
+    { key: 'baseUrl', type: 'string', label: 'Base URL', default: '', placeholder: '留空=按 provider 内置默认（只接受 https，本机回环可用 http）' },
+    { key: 'model', type: 'string', label: '模型', default: '', placeholder: '留空=用当前会话正在用的模型' },
+    { key: 'maxTokens', type: 'number', label: 'max_tokens（0=不传）', default: 0, hint: 'GLM 视觉模型收到 max_tokens 会报 1210，建议 0' },
+  ],
+};
+
 /** 单张图上限：base64 后约 +33%，太大容易把请求体撑爆（DeepSeek 侧上限 48MiB） */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -236,17 +258,6 @@ function pickText(json) {
   return '';
 }
 
-export const qqbotSettingsPage = {
-  title: '模型读图 · 设置',
-  desc: '用「当前会话的模型」读图：填了 Key 就用这里的，留空则按 provider 自动读宿主 ~/.dsh/.credentials.yaml',
-  schema: [
-    { key: 'apiKey', type: 'string', label: 'API Key（可留空）', default: '', placeholder: '留空=自动读宿主凭据' },
-    { key: 'baseUrl', type: 'string', label: 'Base URL（可留空）', default: '', placeholder: '留空=按 provider 内置默认，如 https://api.deepseek.com' },
-    { key: 'model', type: 'string', label: '模型（可留空）', default: '', placeholder: '留空=用当前会话正在用的模型' },
-    { key: 'maxTokens', type: 'number', label: 'max_tokens（0=不传）', default: 0, hint: 'GLM 视觉模型收到 max_tokens 会报 1210，建议 0' },
-  ],
-};
-
 export default {
   name: 'model_see',
   description:
@@ -271,30 +282,40 @@ export default {
     if (!list.length) return { ok: false, msg: 'images 不能为空（本地路径或 http(s) 链接）' };
 
     const cfg = readCfg(env);
+    // ★ 2026-11-21 主人要求：面板可选两种取值优先级
+    //   · 当前会话优先（默认）：模型 / 地址 / Key 都先跟当前会话与宿主凭据走，面板值作兜底
+    //   · 面板设置优先：先用手填的三项，缺的才回落到当前会话 / 宿主凭据
+    const panelFirst = /面板/.test(String(cfg?.sourceMode || ''));
     const { provider, model: curModel } = currentModelOf(env, cfg);
-    const model = String(args?.model || cfg?.model || curModel || '').trim();
+    const cfgModel = String(cfg?.model || '').trim();
+    const argModel = String(args?.model || '').trim();
+    const model = argModel || (panelFirst ? (cfgModel || curModel) : (curModel || cfgModel));
     if (!model) {
       return { ok: false, msg: '拿不到当前会话的模型名。请在工具参数里传 model，或在扩展设置里填「模型」' };
     }
 
     // ★ CodeRabbit #20（CWE-319）：这里会把 `Authorization: Bearer <Key>` 发出去，
     //   所以 baseUrl 只接受 **https**；http 仅放行本机回环（自建代理场景）。非法值直接拒。
-    const rawBase = String(cfg?.baseUrl || DEFAULT_BASE[provider.toLowerCase()] || '').trim();
-    const baseUrl = sanitizeBaseUrl(rawBase);
+    const cfgBase = sanitizeBaseUrl(cfg?.baseUrl);
+    const defBase = sanitizeBaseUrl(DEFAULT_BASE[provider.toLowerCase()] || '');
+    const baseUrl = panelFirst ? (cfgBase || defBase) : (defBase || cfgBase);
     if (!baseUrl) {
+      const tried = String(cfg?.baseUrl || '').trim() || DEFAULT_BASE[provider.toLowerCase()] || '';
       return {
         ok: false,
-        msg: rawBase
-          ? `Base URL 不安全或不合法（${rawBase}）：只接受 https://（本机 127.0.0.1/localhost 可用 http）`
+        msg: tried
+          ? `Base URL 不安全或不合法（${tried}）：只接受 https://（本机 127.0.0.1/localhost 可用 http）`
           : `不知道 provider「${provider || '(未知)'}」的 API 地址。请在本扩展设置里填 Base URL（例如 https://api.deepseek.com）`,
       };
     }
 
-    // Key：① 面板填的 → ② 宿主 credentials seam（官方正规通道：按操作解析、热更新、环境变量层优先）
-    //       → ③ 老宿主没有该服务时，自己读 ~/.dsh/.credentials.yaml 兜底
-    let apiKey = String(cfg?.apiKey || '').trim();
-    let keyFrom = apiKey ? '面板设置' : '';
-    if (!apiKey) {
+    // Key：宿主 credentials seam（官方正规通道：按操作解析、热更新、环境变量层优先）
+    //      → 老宿主没有该服务时，自己读 ~/.dsh/.credentials.yaml 兜底。
+    //      面板填的 Key 按 sourceMode 决定排前面还是后面。
+    const cfgKey = String(cfg?.apiKey || '').trim();
+    let hostKey = '';
+    let hostFrom = '';
+    {
       const cands = KEY_REFS[provider.toLowerCase()] || [];
       const cred = (() => {
         try { return env?.kernel?.get?.('credentials') || env?.ctx?.get?.('credentials'); } catch { return undefined; }
@@ -304,20 +325,22 @@ export default {
           try {
             const r = await cred.resolve(ref);
             if (r && r.value) {
-              apiKey = String(r.value);
-              keyFrom = `credentials:${ref}${r.source ? '@' + r.source : ''}`;
+              hostKey = String(r.value);
+              hostFrom = `credentials:${ref}${r.source ? '@' + r.source : ''}`;
               break;
             }
           } catch { /* 换下一个候选 */ }
         }
       }
-      if (!apiKey) {
+      if (!hostKey) {
         const refs = hostCredRefs();
         for (const ref of cands) {
-          if (refs[ref]) { apiKey = refs[ref]; keyFrom = `credentials.yaml:${ref}`; break; }
+          if (refs[ref]) { hostKey = refs[ref]; hostFrom = `credentials.yaml:${ref}`; break; }
         }
       }
     }
+    const apiKey = panelFirst ? (cfgKey || hostKey) : (hostKey || cfgKey);
+    const keyFrom = apiKey && apiKey === cfgKey ? '面板设置' : hostFrom;
     if (!apiKey) {
       const want = (KEY_REFS[provider.toLowerCase()] || []).join(' / ') || '该 provider 的 Key';
       return {
