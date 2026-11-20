@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-11-15",
+  "updated": "2026-11-20",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
@@ -111,6 +111,34 @@
       ],
       "homepage": "https://github.com/zaofan-make/dsh-qqbot",
       "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/demo-author/cover.png"
+    },
+    {
+      "id": "model-vision",
+      "name": "模型读图 · model_see",
+      "author": "做早饭",
+      "version": "1.0.1",
+      "minPluginVersion": "1.12.31",
+      "description": "用当前会话正在用的那个模型看图：本地路径或网址 + 一句要求，图在工具里发给模型，只把文字结果带回上下文。历史里不留 image block —— 不会每轮重发图片、不会重复烧视觉 token，也不会因为某张图触发上游审核而把整个会话锁死。走标准 OpenAI 兼容 image_url，换服务商只改 baseURL。",
+      "repo": "zaofan-make/dsh-qqbot-plugins",
+      "path": "packs/model-vision",
+      "tags": [
+        "读图",
+        "多模态",
+        "视觉",
+        "OpenAI兼容",
+        "防毒会话"
+      ],
+      "kinds": [
+        "tools"
+      ],
+      "files": [
+        "README.md",
+        "cover.png",
+        "qqbot-pack.json",
+        "tools/model_see.mjs"
+      ],
+      "homepage": "https://github.com/zaofan-make/dsh-qqbot",
+      "cover": "https://cdn.jsdelivr.net/gh/zaofan-make/dsh-qqbot-plugins@main/packs/model-vision/cover.png"
     },
     {
       "id": "pick-one",
