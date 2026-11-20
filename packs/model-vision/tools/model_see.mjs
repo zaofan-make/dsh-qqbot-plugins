@@ -132,18 +132,23 @@ function toImageUrl(src) {
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
-/** 解析 images 参数：换行/竖线分条；http(s) 整段保留（URL 里可能带逗号，如 ?crop=1,2,3,4） */
+/** 解析 images 参数：换行/竖线分条；URL 段只在「逗号后紧跟 http(s)」时再切（保住 URL 自带的逗号） */
 function parseImages(raw) {
   if (Array.isArray(raw)) return raw.map((x) => String(x || '').trim()).filter(Boolean);
   const out = [];
+  const push = (s) => {
+    const t = String(s || '').trim().replace(/^["'`]|["'`]$/g, '');
+    if (t) out.push(t);
+  };
   for (const piece of String(raw || '').split(/[\n|]+/)) {
     const s = piece.trim().replace(/^["'`]|["'`]$/g, '');
     if (!s) continue;
-    if (/^https?:\/\//i.test(s)) { out.push(s); continue; }
-    for (const part of s.split(/[,，]+/)) {
-      const p = part.trim().replace(/^["'`]|["'`]$/g, '');
-      if (p) out.push(p);
+    if (/^https?:\/\//i.test(s)) {
+      // 一个 URL 可能自带逗号（?crop=1,2,3,4）⇒ 只在「逗号后面紧跟 http(s)://」时才切
+      for (const p of s.split(/[,，](?=\s*https?:\/\/)/i)) push(p);
+      continue;
     }
+    for (const p of s.split(/[,，]+/)) push(p);
   }
   return out;
 }
@@ -248,10 +253,11 @@ export default {
   description:
     '用**当前会话正在用的那个模型**读一张或多张图片（走 OpenAI 兼容的 image_url 格式，只把文字结果带回上下文，'
     + '不会在历史里留下 image block）。'
-    + 'images：本地绝对路径或 http(s) 链接，多个用换行/竖线/逗号分隔；prompt：要它看什么（必填）。'
+    + 'images：本地绝对路径或 http(s) 链接，多个用**换行或竖线**分隔（单个 URL 里自带的逗号不会被切开）；'
+    + 'prompt：要它看什么（必填）。'
     + '模型不支持读图时会原样返回上游报错。',
   inputSchema: {
-    images: { type: 'string', required: true, description: '图片：本地路径或网址，多个用换行/竖线/逗号分隔' },
+    images: { type: 'string', required: true, description: '图片：本地路径或网址，多个用换行或竖线分隔（URL 内部的逗号不会被切开；URL 之间也可用逗号接 http(s)）' },
     prompt: { type: 'string', required: true, description: '要模型看图回答什么（必填），如"描述这张图""图里的文字是什么"' },
     model: { type: 'string', description: '覆盖模型（默认=当前会话的模型）' },
     maxTokens: { type: 'number', description: '可选 max_tokens（默认不传，GLM 视觉模型不认这个参数）' },
@@ -361,6 +367,9 @@ export default {
         headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(120_000),
+        // ★ CodeRabbit #20：**不许跟随重定向** —— 307/308 会把请求体（含图与 prompt）
+        //   重发到新地址；若目标是非回环 http，内容就跑在明文上了。宁可失败也不降级。
+        redirect: 'error',
       });
       // ★ CodeRabbit #20：**body 读取必须也在 try 里** —— 服务器只回响应头就断流时
       //   `res.text()` 会 reject；放在 try 外会让整个工具调用抛错，而不是回 `{ok:false}`。

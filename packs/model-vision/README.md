@@ -19,7 +19,7 @@ model_see(images="D:\\素材\\a.jpg", prompt="描述这张图")
 model_see(images="https://x.com/a.png\nD:\\素材\\b.jpg", prompt="这两张图有什么区别？")
 ```
 
-- `images`：本地绝对路径或 `http(s)` 链接，多个用换行 / 竖线 / 逗号分隔
+- `images`：本地绝对路径或 `http(s)` 链接，多个用**换行 / 竖线**分隔（单个 URL 里自带的逗号不会被切开；URL 之间也可以逗号后直接接 `http(s)://`）
 - `prompt`：**必填**，要模型看图回答什么
 - `model`：可选，覆盖模型（默认=当前会话的模型）
 - `maxTokens`：可选，默认**不传**（GLM 视觉模型收到 `max_tokens` 会报 1210）
