@@ -24,7 +24,7 @@
  *   node model_see.mjs <图片路径或URL> "描述这张图" [--model deepseek-flash] [--base https://api.deepseek.com] [--key sk-xxx]
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const PACK_ID = 'model-vision';
@@ -112,11 +112,6 @@ function sniffMime(buf) {
   return '';
 }
 
-const MIME_BY_EXT = {
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-  '.webp': 'image/webp', '.gif': 'image/gif', '.bmp': 'image/bmp',
-};
-
 /** 一个输入项 → 可直接放进 image_url.url 的字符串 */
 function toImageUrl(src) {
   const s = String(src || '').trim();
@@ -128,7 +123,11 @@ function toImageUrl(src) {
   if (!st.isFile()) throw new Error(`不是文件: ${s}`);
   if (st.size > MAX_IMAGE_BYTES) throw new Error(`图片过大（${(st.size / 1024 / 1024).toFixed(1)}MB > ${MAX_IMAGE_BYTES / 1024 / 1024}MB）: ${s}`);
   const buf = readFileSync(s);
-  const mime = sniffMime(buf) || MIME_BY_EXT[extname(s).toLowerCase()] || 'image/jpeg';
+  // ★ CodeRabbit #20（Major）：**只认文件头**，绝不靠扩展名回退成 image/jpeg。
+  //   否则被提示注入的 images 参数可以指向 `~/.dsh/.credentials.yaml` 之类，
+  //   把非图片文件 base64 后当"图片"发给外部端点 —— 等于凭据外带。
+  const mime = sniffMime(buf);
+  if (!mime) throw new Error(`不是受支持的图片格式（PNG/JPEG/GIF/WEBP/BMP）: ${s}`);
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
