@@ -77,6 +77,26 @@ const KEY_REFS = {
   huoshancoding: ['HUOSHANCODING_API_KEY', 'VOLCE_API_KEY'],
 };
 
+/** 本机回环主机：只有这些允许用 http（会带 Bearer Key 出去，别的地方必须 https） */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']);
+
+/**
+ * 校验 baseUrl：只接受 https，http 仅放行本机回环；非法/不安全一律返回空串（调用方报错）。
+ * 返回去掉尾部斜杠的地址。
+ */
+function sanitizeBaseUrl(raw) {
+  const s = String(raw || '').trim().replace(/\/+$/, '');
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol === 'https:') return s;
+    if (u.protocol === 'http:' && LOOPBACK_HOSTS.has(u.hostname)) return s;
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 /** 只有这两个 provider 需要 `x-opencode-session` 头（精确匹配，别的家一概不加） */
 const OPENCODE_FAMILY = new Set(['opencode', 'opencode-go']);
 
@@ -112,13 +132,20 @@ function toImageUrl(src) {
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
-/** 解析 images 参数：字符串按换行/竖线/逗号切，数组直接用 */
+/** 解析 images 参数：换行/竖线分条；http(s) 整段保留（URL 里可能带逗号，如 ?crop=1,2,3,4） */
 function parseImages(raw) {
   if (Array.isArray(raw)) return raw.map((x) => String(x || '').trim()).filter(Boolean);
-  return String(raw || '')
-    .split(/[\n|,，]+/)
-    .map((x) => x.trim().replace(/^["'`]|["'`]$/g, ''))
-    .filter(Boolean);
+  const out = [];
+  for (const piece of String(raw || '').split(/[\n|]+/)) {
+    const s = piece.trim().replace(/^["'`]|["'`]$/g, '');
+    if (!s) continue;
+    if (/^https?:\/\//i.test(s)) { out.push(s); continue; }
+    for (const part of s.split(/[,，]+/)) {
+      const p = part.trim().replace(/^["'`]|["'`]$/g, '');
+      if (p) out.push(p);
+    }
+  }
+  return out;
 }
 
 /** 宿主 `~/.dsh/.credentials.yaml` 里 refs.* 的值（按 mtime 缓存，避免每轮读盘） */
@@ -149,10 +176,17 @@ function hostCredRefs() {
   }
 }
 
-/** 面板配置：优先 env.getConfig()，其次 env.config，最后读 ext-config 文件 */
+/** 面板配置：优先 env.getConfig（文档化作用域 profile / data），其次 env.config，最后读 ext-config 文件 */
 function readCfg(env) {
   let cfg = {};
-  try { const c = env?.getConfig?.(env?.peer?.scope); if (c && typeof c === 'object') cfg = { ...c }; } catch { /* ignore */ }
+  // ★ CodeRabbit #20：getConfig 的**文档化**作用域是 'profile' / 'data'（设置卡片=profile，dock 卡=data）；
+  //   以前传的是 QQ 会话作用域 'group'/'c2c'，宿主认不认不在契约里 —— 认不出就会静默丢掉面板值。
+  for (const scope of ['profile', 'data']) {
+    try {
+      const c = env?.getConfig?.(scope);
+      if (c && typeof c === 'object' && Object.keys(c).length) cfg = { ...cfg, ...c };
+    } catch { /* 换下一个作用域 */ }
+  }
   if (!Object.keys(cfg).length && env?.config && typeof env.config === 'object') cfg = { ...env.config };
   if (!Object.keys(cfg).length) {
     try {
@@ -238,11 +272,16 @@ export default {
       return { ok: false, msg: '拿不到当前会话的模型名。请在工具参数里传 model，或在扩展设置里填「模型」' };
     }
 
-    const baseUrl = String(cfg?.baseUrl || DEFAULT_BASE[provider.toLowerCase()] || '').trim().replace(/\/+$/, '');
+    // ★ CodeRabbit #20（CWE-319）：这里会把 `Authorization: Bearer <Key>` 发出去，
+    //   所以 baseUrl 只接受 **https**；http 仅放行本机回环（自建代理场景）。非法值直接拒。
+    const rawBase = String(cfg?.baseUrl || DEFAULT_BASE[provider.toLowerCase()] || '').trim();
+    const baseUrl = sanitizeBaseUrl(rawBase);
     if (!baseUrl) {
       return {
         ok: false,
-        msg: `不知道 provider「${provider || '(未知)'}」的 API 地址。请在本扩展设置里填 Base URL（例如 https://api.deepseek.com）`,
+        msg: rawBase
+          ? `Base URL 不安全或不合法（${rawBase}）：只接受 https://（本机 127.0.0.1/localhost 可用 http）`
+          : `不知道 provider「${provider || '(未知)'}」的 API 地址。请在本扩展设置里填 Base URL（例如 https://api.deepseek.com）`,
       };
     }
 
@@ -315,6 +354,7 @@ export default {
       headers['x-opencode-session'] = sid;
     }
     let res;
+    let raw = '';
     try {
       res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -322,12 +362,14 @@ export default {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(120_000),
       });
+      // ★ CodeRabbit #20：**body 读取必须也在 try 里** —— 服务器只回响应头就断流时
+      //   `res.text()` 会 reject；放在 try 外会让整个工具调用抛错，而不是回 `{ok:false}`。
+      raw = await res.text();
     } catch (e) {
       return { ok: false, msg: `请求失败（${baseUrl}）：${e instanceof Error ? e.message : String(e)}` };
     }
 
     const ms = Date.now() - started;
-    const raw = await res.text();
     if (!res.ok) {
       // 上游报错原样带回：1210=参数非法 / 10013=内容审核 / 400=请求不合法
       return {
