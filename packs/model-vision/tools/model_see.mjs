@@ -296,16 +296,31 @@ export default {
 
     // ★ CodeRabbit #20（CWE-319）：这里会把 `Authorization: Bearer <Key>` 发出去，
     //   所以 baseUrl 只接受 **https**；http 仅放行本机回环（自建代理场景）。非法值直接拒。
-    const cfgBase = sanitizeBaseUrl(cfg?.baseUrl);
+    // ★ CodeRabbit #21（Major）：面板填了 baseUrl 但**不合法**时，绝不能悄悄回落到默认端点 ——
+    //   那样会把面板里的模型 / Key / 图片发给另一个服务商。填了却不合法 ⇒ 直接报错。
+    const cfgBaseRaw = String(cfg?.baseUrl || '').trim();
+    const cfgBase = sanitizeBaseUrl(cfgBaseRaw);
     const defBase = sanitizeBaseUrl(DEFAULT_BASE[provider.toLowerCase()] || '');
-    const baseUrl = panelFirst ? (cfgBase || defBase) : (defBase || cfgBase);
+    let baseUrl = '';
+    if (panelFirst) {
+      if (cfgBaseRaw) {
+        if (!cfgBase) {
+          return { ok: false, msg: `面板里的 Base URL 不安全或不合法（${cfgBaseRaw}）：只接受 https://（本机 127.0.0.1/localhost 可用 http）。已拒绝发送，没有改用其它端点` };
+        }
+        baseUrl = cfgBase;
+      } else {
+        baseUrl = defBase;
+      }
+    } else {
+      baseUrl = defBase || cfgBase;
+      if (!baseUrl && cfgBaseRaw) {
+        return { ok: false, msg: `面板里的 Base URL 不安全或不合法（${cfgBaseRaw}）：只接受 https://（本机回环可用 http）` };
+      }
+    }
     if (!baseUrl) {
-      const tried = String(cfg?.baseUrl || '').trim() || DEFAULT_BASE[provider.toLowerCase()] || '';
       return {
         ok: false,
-        msg: tried
-          ? `Base URL 不安全或不合法（${tried}）：只接受 https://（本机 127.0.0.1/localhost 可用 http）`
-          : `不知道 provider「${provider || '(未知)'}」的 API 地址。请在本扩展设置里填 Base URL（例如 https://api.deepseek.com）`,
+        msg: `不知道 provider「${provider || '(未知)'}」的 API 地址。请在本扩展设置里填 Base URL（例如 https://api.deepseek.com）`,
       };
     }
 
