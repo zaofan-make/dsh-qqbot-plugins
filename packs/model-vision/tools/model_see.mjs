@@ -152,11 +152,18 @@ function providerKeys(provider) {
   return { pl, head: heads[0] || pl, heads, upper };
 }
 
+/** 只取对象**自有**属性：`providerKeys` 的候选前缀可能撞上原型链上的名字 */
+const ownRef = (obj, k) => (Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : undefined);
+
 /** provider → 默认 baseUrl：精确 → 各候选前缀（最长优先） */
 function baseUrlOf(provider) {
   const { pl, heads } = providerKeys(provider);
-  if (DEFAULT_BASE[pl]) return DEFAULT_BASE[pl];
-  for (const h of heads) if (DEFAULT_BASE[h]) return DEFAULT_BASE[h];
+  const exact = ownRef(DEFAULT_BASE, pl);
+  if (exact) return exact;
+  for (const h of heads) {
+    const hit = ownRef(DEFAULT_BASE, h);
+    if (hit) return hit;
+  }
   return '';
 }
 
@@ -165,8 +172,10 @@ function keyRefsOf(provider) {
   const { pl, heads, upper } = providerKeys(provider);
   const out = [];
   const push = (r) => { if (r && !out.includes(r)) out.push(r); };
-  for (const r of KEY_REFS[pl] || []) push(r);
-  for (const h of heads) for (const r of KEY_REFS[h] || []) push(r);
+  // ★ CodeRabbit #23：`KEY_REFS['constructor']` 会拿到原型链上的 Object 构造函数（不可迭代），
+  //   直接 for...of 会抛 —— 所以一律用 ownRef 取自有属性。
+  for (const r of ownRef(KEY_REFS, pl) || []) push(r);
+  for (const h of heads) for (const r of ownRef(KEY_REFS, h) || []) push(r);
   push(`${upper}_API_KEY`);
   for (const h of heads) push(`${h.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}_API_KEY`);
   return out;
