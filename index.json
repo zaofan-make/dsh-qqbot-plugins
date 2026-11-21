@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updated": "2026-11-20",
+  "updated": "2026-11-21",
   "note": "本文件由 .github/workflows/build-index.yml 自动生成，请勿手改；新增插件只要在 packs/ 下建目录。",
   "plugins": [
     {
