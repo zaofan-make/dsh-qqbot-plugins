@@ -75,6 +75,7 @@ const DEFAULT_BASE = {
   opencode: 'https://opencode.ai/inference/go/openai/v1',
   'opencode-go': 'https://opencode.ai/inference/go/openai/v1',
   huoshancoding: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+  scnet: 'https://api.scnet.cn/api/llm/v1',
 };
 
 /** provider → 宿主凭据 refs 里的候选键名（按顺序取第一个有值的） */
@@ -97,6 +98,7 @@ const KEY_REFS = {
   opencode: ['OPENCODE_API_KEY'],
   'opencode-go': ['OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY'],
   huoshancoding: ['HUOSHANCODING_API_KEY', 'VOLCE_API_KEY'],
+  scnet: ['SCNET_API_KEY'],
 };
 
 /** 本机回环主机：只有这些允许用 http（会带 Bearer Key 出去，别的地方必须 https） */
@@ -121,6 +123,42 @@ function sanitizeBaseUrl(raw) {
 
 /** 只有这两个 provider 需要 `x-opencode-session` 头（精确匹配，别的家一概不加） */
 const OPENCODE_FAMILY = new Set(['opencode', 'opencode-go']);
+
+/**
+ * provider 名规整（issue #22，ffainy 报的）：
+ * DSH 的 provider 常带**凭据实例后缀** —— `bigmodel-199` / `zhipu-2` / `deepseek-1`，
+ * 而上面的两张表按裸名写 ⇒ 精确匹配会 miss（报"不知道地址"、Key 也找不到）。
+ * 统一给出：小写全名、去掉 `-后缀` 的 head、以及凭据名用的 UPPER_SNAKE 形式。
+ */
+function providerKeys(provider) {
+  const pl = String(provider || '').trim().toLowerCase();
+  const head = pl.split('-')[0] || pl;
+  const upper = pl.replace(/[^a-z0-9]+/gi, '_').toUpperCase();
+  return { pl, head, upper };
+}
+
+/** provider → 默认 baseUrl：先精确，再回退到去掉后缀的 head */
+function baseUrlOf(provider) {
+  const { pl, head } = providerKeys(provider);
+  return DEFAULT_BASE[pl] || DEFAULT_BASE[head] || '';
+}
+
+/** provider → 宿主凭据候选键名：精确表 → head 表 → `<PROVIDER>_API_KEY` 通用候选（去重保序） */
+function keyRefsOf(provider) {
+  const { pl, head, upper } = providerKeys(provider);
+  const out = [];
+  for (const r of KEY_REFS[pl] || []) if (!out.includes(r)) out.push(r);
+  for (const r of KEY_REFS[head] || []) if (!out.includes(r)) out.push(r);
+  // `bigmodel-199` → BIGMODEL_199_API_KEY；`deepseek-1` → DEEPSEEK_1_API_KEY
+  for (const r of [`${upper}_API_KEY`, `${head.toUpperCase()}_API_KEY`]) if (!out.includes(r)) out.push(r);
+  return out;
+}
+
+/** 是不是 opencode 家族（要带 `x-opencode-session`；同样按 head 兜底，兼容 `opencode-2`） */
+function isOpencodeFamily(provider) {
+  const { pl, head } = providerKeys(provider);
+  return OPENCODE_FAMILY.has(pl) || OPENCODE_FAMILY.has(head);
+}
 
 /** 文件头 → MIME（比扩展名靠谱：QQ 落盘的临时文件常没有后缀） */
 function sniffMime(buf) {
@@ -300,7 +338,7 @@ export default {
     //   那样会把面板里的模型 / Key / 图片发给另一个服务商。填了却不合法 ⇒ 直接报错。
     const cfgBaseRaw = String(cfg?.baseUrl || '').trim();
     const cfgBase = sanitizeBaseUrl(cfgBaseRaw);
-    const defBase = sanitizeBaseUrl(DEFAULT_BASE[provider.toLowerCase()] || '');
+    const defBase = sanitizeBaseUrl(baseUrlOf(provider));
     let baseUrl = '';
     if (panelFirst) {
       if (cfgBaseRaw) {
@@ -331,7 +369,7 @@ export default {
     let hostKey = '';
     let hostFrom = '';
     {
-      const cands = KEY_REFS[provider.toLowerCase()] || [];
+      const cands = keyRefsOf(provider);
       const cred = (() => {
         try { return env?.kernel?.get?.('credentials') || env?.ctx?.get?.('credentials'); } catch { return undefined; }
       })();
@@ -357,7 +395,7 @@ export default {
     const apiKey = panelFirst ? (cfgKey || hostKey) : (hostKey || cfgKey);
     const keyFrom = apiKey && apiKey === cfgKey ? '面板设置' : hostFrom;
     if (!apiKey) {
-      const want = (KEY_REFS[provider.toLowerCase()] || []).join(' / ') || '该 provider 的 Key';
+      const want = keyRefsOf(provider).join(' / ') || '该 provider 的 Key';
       return {
         ok: false,
         msg: `没有可用的 API Key（provider=${provider || '未知'}，宿主凭据里没找到 ${want}）。请在本扩展设置里填 API Key`,
@@ -392,7 +430,7 @@ export default {
     //   ⚠️ 这是 opencode **独有**的要求 —— 判据用**精确白名单**，只对这两个 provider 生效：
     //   deepseek / zhipu / openai / 火山 / dashscope / siliconflow 等**一律不附加任何自定义头**，
     //   免得别的网关因为不认识的多余头而报 400。
-    if (OPENCODE_FAMILY.has(provider.toLowerCase())) {
+    if (isOpencodeFamily(provider)) {
       const sid = String(env?.peerSessionId || env?.exec?.sessionId || '').trim() || randomUUID();
       headers['x-opencode-session'] = sid;
     }
