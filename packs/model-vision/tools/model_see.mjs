@@ -124,40 +124,58 @@ function sanitizeBaseUrl(raw) {
 /** 只有这两个 provider 需要 `x-opencode-session` 头（精确匹配，别的家一概不加） */
 const OPENCODE_FAMILY = new Set(['opencode', 'opencode-go']);
 
+/** 两张表里出现过的 provider 名（用于识别「最长已知前缀」） */
+const KNOWN_PROVIDERS = [...new Set([...Object.keys(DEFAULT_BASE), ...Object.keys(KEY_REFS)])];
+
 /**
  * provider 名规整（issue #22，ffainy 报的）：
  * DSH 的 provider 常带**凭据实例后缀** —— `bigmodel-199` / `zhipu-2` / `deepseek-1`，
  * 而上面的两张表按裸名写 ⇒ 精确匹配会 miss（报"不知道地址"、Key 也找不到）。
- * 统一给出：小写全名、去掉 `-后缀` 的 head、以及凭据名用的 UPPER_SNAKE 形式。
+ *
+ * ★ CodeRabbit #23：不能只按**第一个** `-` 切 —— `opencode-go-2` 会切出 `opencode`，
+ *   从而丢掉 `OPENCODE_GO_API_KEY` 这个映射。所以先找**最长已知前缀**（`opencode-go`），
+ *   找不到再退回第一段。
+ *
+ * 返回：`pl` 小写全名、`heads` 候选前缀（最长优先，末位兜底第一段）、`upper` 凭据用的 UPPER_SNAKE。
  */
 function providerKeys(provider) {
   const pl = String(provider || '').trim().toLowerCase();
-  const head = pl.split('-')[0] || pl;
+  const first = pl.split('-')[0] || pl;
+  const heads = [];
+  for (const k of KNOWN_PROVIDERS) {
+    if (!k || k === pl) continue;
+    if (pl.startsWith(k + '-') && !heads.includes(k)) heads.push(k);
+  }
+  heads.sort((a, b) => b.length - a.length);   // 最长已知前缀优先
+  if (!heads.includes(first)) heads.push(first); // 兜底：第一段
   const upper = pl.replace(/[^a-z0-9]+/gi, '_').toUpperCase();
-  return { pl, head, upper };
+  return { pl, head: heads[0] || pl, heads, upper };
 }
 
-/** provider → 默认 baseUrl：先精确，再回退到去掉后缀的 head */
+/** provider → 默认 baseUrl：精确 → 各候选前缀（最长优先） */
 function baseUrlOf(provider) {
-  const { pl, head } = providerKeys(provider);
-  return DEFAULT_BASE[pl] || DEFAULT_BASE[head] || '';
+  const { pl, heads } = providerKeys(provider);
+  if (DEFAULT_BASE[pl]) return DEFAULT_BASE[pl];
+  for (const h of heads) if (DEFAULT_BASE[h]) return DEFAULT_BASE[h];
+  return '';
 }
 
-/** provider → 宿主凭据候选键名：精确表 → head 表 → `<PROVIDER>_API_KEY` 通用候选（去重保序） */
+/** provider → 宿主凭据候选键名：精确表 → 各前缀表 → `<PROVIDER>_API_KEY` 通用候选（去重保序） */
 function keyRefsOf(provider) {
-  const { pl, head, upper } = providerKeys(provider);
+  const { pl, heads, upper } = providerKeys(provider);
   const out = [];
-  for (const r of KEY_REFS[pl] || []) if (!out.includes(r)) out.push(r);
-  for (const r of KEY_REFS[head] || []) if (!out.includes(r)) out.push(r);
-  // `bigmodel-199` → BIGMODEL_199_API_KEY；`deepseek-1` → DEEPSEEK_1_API_KEY
-  for (const r of [`${upper}_API_KEY`, `${head.toUpperCase()}_API_KEY`]) if (!out.includes(r)) out.push(r);
+  const push = (r) => { if (r && !out.includes(r)) out.push(r); };
+  for (const r of KEY_REFS[pl] || []) push(r);
+  for (const h of heads) for (const r of KEY_REFS[h] || []) push(r);
+  push(`${upper}_API_KEY`);
+  for (const h of heads) push(`${h.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}_API_KEY`);
   return out;
 }
 
-/** 是不是 opencode 家族（要带 `x-opencode-session`；同样按 head 兜底，兼容 `opencode-2`） */
+/** 是不是 opencode 家族（要带 `x-opencode-session`；同样按候选前缀兜底，兼容 `opencode-2` / `opencode-go-2`） */
 function isOpencodeFamily(provider) {
-  const { pl, head } = providerKeys(provider);
-  return OPENCODE_FAMILY.has(pl) || OPENCODE_FAMILY.has(head);
+  const { pl, heads } = providerKeys(provider);
+  return OPENCODE_FAMILY.has(pl) || heads.some((h) => OPENCODE_FAMILY.has(h));
 }
 
 /** 文件头 → MIME（比扩展名靠谱：QQ 落盘的临时文件常没有后缀） */
