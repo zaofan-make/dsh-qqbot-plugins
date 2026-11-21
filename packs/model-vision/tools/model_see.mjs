@@ -75,6 +75,7 @@ const DEFAULT_BASE = {
   opencode: 'https://opencode.ai/inference/go/openai/v1',
   'opencode-go': 'https://opencode.ai/inference/go/openai/v1',
   huoshancoding: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+  scnet: 'https://api.scnet.cn/api/llm/v1',
 };
 
 /** provider → 宿主凭据 refs 里的候选键名（按顺序取第一个有值的） */
@@ -97,6 +98,7 @@ const KEY_REFS = {
   opencode: ['OPENCODE_API_KEY'],
   'opencode-go': ['OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY'],
   huoshancoding: ['HUOSHANCODING_API_KEY', 'VOLCE_API_KEY'],
+  scnet: ['SCNET_API_KEY'],
 };
 
 /** 本机回环主机：只有这些允许用 http（会带 Bearer Key 出去，别的地方必须 https） */
@@ -121,6 +123,69 @@ function sanitizeBaseUrl(raw) {
 
 /** 只有这两个 provider 需要 `x-opencode-session` 头（精确匹配，别的家一概不加） */
 const OPENCODE_FAMILY = new Set(['opencode', 'opencode-go']);
+
+/** 两张表里出现过的 provider 名（用于识别「最长已知前缀」） */
+const KNOWN_PROVIDERS = [...new Set([...Object.keys(DEFAULT_BASE), ...Object.keys(KEY_REFS)])];
+
+/**
+ * provider 名规整（issue #22，ffainy 报的）：
+ * DSH 的 provider 常带**凭据实例后缀** —— `bigmodel-199` / `zhipu-2` / `deepseek-1`，
+ * 而上面的两张表按裸名写 ⇒ 精确匹配会 miss（报"不知道地址"、Key 也找不到）。
+ *
+ * ★ CodeRabbit #23：不能只按**第一个** `-` 切 —— `opencode-go-2` 会切出 `opencode`，
+ *   从而丢掉 `OPENCODE_GO_API_KEY` 这个映射。所以先找**最长已知前缀**（`opencode-go`），
+ *   找不到再退回第一段。
+ *
+ * 返回：`pl` 小写全名、`heads` 候选前缀（最长优先，末位兜底第一段）、`upper` 凭据用的 UPPER_SNAKE。
+ */
+function providerKeys(provider) {
+  const pl = String(provider || '').trim().toLowerCase();
+  const first = pl.split('-')[0] || pl;
+  const heads = [];
+  for (const k of KNOWN_PROVIDERS) {
+    if (!k || k === pl) continue;
+    if (pl.startsWith(k + '-') && !heads.includes(k)) heads.push(k);
+  }
+  heads.sort((a, b) => b.length - a.length);   // 最长已知前缀优先
+  if (!heads.includes(first)) heads.push(first); // 兜底：第一段
+  const upper = pl.replace(/[^a-z0-9]+/gi, '_').toUpperCase();
+  return { pl, head: heads[0] || pl, heads, upper };
+}
+
+/** 只取对象**自有**属性：`providerKeys` 的候选前缀可能撞上原型链上的名字 */
+const ownRef = (obj, k) => (Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : undefined);
+
+/** provider → 默认 baseUrl：精确 → 各候选前缀（最长优先） */
+function baseUrlOf(provider) {
+  const { pl, heads } = providerKeys(provider);
+  const exact = ownRef(DEFAULT_BASE, pl);
+  if (exact) return exact;
+  for (const h of heads) {
+    const hit = ownRef(DEFAULT_BASE, h);
+    if (hit) return hit;
+  }
+  return '';
+}
+
+/** provider → 宿主凭据候选键名：精确表 → 各前缀表 → `<PROVIDER>_API_KEY` 通用候选（去重保序） */
+function keyRefsOf(provider) {
+  const { pl, heads, upper } = providerKeys(provider);
+  const out = [];
+  const push = (r) => { if (r && !out.includes(r)) out.push(r); };
+  // ★ CodeRabbit #23：`KEY_REFS['constructor']` 会拿到原型链上的 Object 构造函数（不可迭代），
+  //   直接 for...of 会抛 —— 所以一律用 ownRef 取自有属性。
+  for (const r of ownRef(KEY_REFS, pl) || []) push(r);
+  for (const h of heads) for (const r of ownRef(KEY_REFS, h) || []) push(r);
+  push(`${upper}_API_KEY`);
+  for (const h of heads) push(`${h.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}_API_KEY`);
+  return out;
+}
+
+/** 是不是 opencode 家族（要带 `x-opencode-session`；同样按候选前缀兜底，兼容 `opencode-2` / `opencode-go-2`） */
+function isOpencodeFamily(provider) {
+  const { pl, heads } = providerKeys(provider);
+  return OPENCODE_FAMILY.has(pl) || heads.some((h) => OPENCODE_FAMILY.has(h));
+}
 
 /** 文件头 → MIME（比扩展名靠谱：QQ 落盘的临时文件常没有后缀） */
 function sniffMime(buf) {
@@ -300,7 +365,7 @@ export default {
     //   那样会把面板里的模型 / Key / 图片发给另一个服务商。填了却不合法 ⇒ 直接报错。
     const cfgBaseRaw = String(cfg?.baseUrl || '').trim();
     const cfgBase = sanitizeBaseUrl(cfgBaseRaw);
-    const defBase = sanitizeBaseUrl(DEFAULT_BASE[provider.toLowerCase()] || '');
+    const defBase = sanitizeBaseUrl(baseUrlOf(provider));
     let baseUrl = '';
     if (panelFirst) {
       if (cfgBaseRaw) {
@@ -331,7 +396,7 @@ export default {
     let hostKey = '';
     let hostFrom = '';
     {
-      const cands = KEY_REFS[provider.toLowerCase()] || [];
+      const cands = keyRefsOf(provider);
       const cred = (() => {
         try { return env?.kernel?.get?.('credentials') || env?.ctx?.get?.('credentials'); } catch { return undefined; }
       })();
@@ -357,7 +422,7 @@ export default {
     const apiKey = panelFirst ? (cfgKey || hostKey) : (hostKey || cfgKey);
     const keyFrom = apiKey && apiKey === cfgKey ? '面板设置' : hostFrom;
     if (!apiKey) {
-      const want = (KEY_REFS[provider.toLowerCase()] || []).join(' / ') || '该 provider 的 Key';
+      const want = keyRefsOf(provider).join(' / ') || '该 provider 的 Key';
       return {
         ok: false,
         msg: `没有可用的 API Key（provider=${provider || '未知'}，宿主凭据里没找到 ${want}）。请在本扩展设置里填 API Key`,
@@ -392,7 +457,7 @@ export default {
     //   ⚠️ 这是 opencode **独有**的要求 —— 判据用**精确白名单**，只对这两个 provider 生效：
     //   deepseek / zhipu / openai / 火山 / dashscope / siliconflow 等**一律不附加任何自定义头**，
     //   免得别的网关因为不认识的多余头而报 400。
-    if (OPENCODE_FAMILY.has(provider.toLowerCase())) {
+    if (isOpencodeFamily(provider)) {
       const sid = String(env?.peerSessionId || env?.exec?.sessionId || '').trim() || randomUUID();
       headers['x-opencode-session'] = sid;
     }
